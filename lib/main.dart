@@ -13,6 +13,7 @@ import 'package:simple_speed_dial/simple_speed_dial.dart';
 import 'global.dart';
 
 import 'model/app_responsive.dart';
+import 'popular dish/popular_dish.dart';
 import 'tracker/track_order.dart';
 // import 'package:google_fonts/google_fonts.dart';
 
@@ -20,11 +21,11 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (kIsWeb) {
     await Firebase.initializeApp(
-        options: FirebaseOptions(
-            apiKey: "AIzaSyBhZw8FsHp1_VmcG81DXZ9XqPbc7-Uz41g",
-            appId: "1:1087992874835:web:7f7e85e68e40fbd21283a6",
-            messagingSenderId: "1087992874835",
-            projectId: "menumate-ce7ae"));
+        options: const FirebaseOptions(
+            apiKey: "AIzaSyBKC3GD_3Bcdf7u7lrHVffyMaqVDJ-Mr-o",
+            appId: "1:328696000707:web:6fbd18df36b31ca219f276",
+            messagingSenderId: "G-FKD3GQ32BS",
+            projectId: "dineease-f81e5"));
   }
 
   runApp(const MyApp());
@@ -36,7 +37,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'MenuMate',
+      title: 'DineEase',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
@@ -174,7 +175,7 @@ class _MyHomePageState extends State<MyHomePage>
         body: Theme(
           data: Theme.of(context).copyWith(
             scrollbarTheme: ScrollbarThemeData(
-                thumbColor: MaterialStateProperty.all(Colors.black54),
+                thumbColor: WidgetStateProperty.all(Colors.black54),
                 crossAxisMargin: 5),
           ),
           child: Scrollbar(
@@ -269,7 +270,7 @@ class _MyHomePageState extends State<MyHomePage>
                   thickness: 3,
                 ),
                 SizedBox(height: 10),
-                // PopularDish(),
+                PopularDish(),
                 SizedBox(height: 10),
                 Divider(
                   indent: 200,
@@ -594,9 +595,9 @@ class _MyHomePageState extends State<MyHomePage>
                 ElevatedButton(
                   style: ButtonStyle(
                     backgroundColor:
-                        MaterialStateProperty.all<Color>(Color(0xff131e29)),
+                        WidgetStateProperty.all<Color>(Color(0xff131e29)),
                     foregroundColor:
-                        MaterialStateProperty.all<Color>(Colors.white),
+                        WidgetStateProperty.all<Color>(Colors.white),
                   ),
                   child: Text('Access'),
                   onPressed: () {

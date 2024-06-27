@@ -38,6 +38,9 @@ dependencies:
   cloud_firestore: ^5.0.2
   shared_preferences: ^2.2.3
   simple_speed_dial: ^0.1.7
+  carousel_slider: ^4.2.1
+  fluttertoast: ^8.2.6
+  font_awesome_flutter: ^10.7.0
 
 dev_dependencies:
   flutter_test:
