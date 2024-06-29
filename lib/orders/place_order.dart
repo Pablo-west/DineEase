@@ -63,17 +63,17 @@ class _PlaceOdrerState extends State<PlaceOdrer> {
 
   @override
   Widget build(BuildContext context) {
-    final MediaQueryData mediaQueryData = MediaQuery.of(context);
+    // final MediaQueryData mediaQueryData = MediaQuery.of(context);
 
     return Stack(
       clipBehavior: Clip.none,
       children: [
         SizedBox(
-          height: mediaQueryData.size.height,
+          // height: mediaQueryData.size.height,
           // height: 800,
-          width: AppResponsive.isTablet(context)
-              ? mediaQueryData.size.width * 2
-              : mediaQueryData.size.width * 3,
+          // width: AppResponsive.isTablet(context)
+          //     ? mediaQueryData.size.width * 2
+          //     : mediaQueryData.size.width * 3,
           child: SingleChildScrollView(
             child: Column(
               children: [
@@ -138,19 +138,18 @@ class _PlaceOdrerState extends State<PlaceOdrer> {
   }
 
   Column mobileView(BuildContext context) {
-    final MediaQueryData mediaQueryData = MediaQuery.of(context);
-
     return Column(
       children: [
         SizedBox(
-          height: 130,
-          // width: 170,
+          height: 150,
+          //food image
           child: foodLabel(widget.imagePath, widget.foodName),
         ),
-        SizedBox(height: 20),
-        SizedBox(
-          width: mediaQueryData.size.width / 1.3,
+        SizedBox(height: 15),
+        Container(
+          // width: mediaQueryData.size.width / 1,
           height: 400,
+          margin: EdgeInsets.symmetric(horizontal: 15),
           child: ListView(
             padding: EdgeInsets.only(left: 10, right: 10),
             children: [
@@ -211,11 +210,11 @@ class _PlaceOdrerState extends State<PlaceOdrer> {
             ),
           )),
           SizedBox(height: 15),
-          entryTextField(
-              tableNumController, "Enter your table number", "Eg: Table 03"),
+          entryTextField(TextInputType.number, tableNumController,
+              "Enter your table number", "Eg: 03"),
           SizedBox(height: 10),
-          entryTextField(
-              userNameontroller, "Enter your Name", "Eg: Pablo West"),
+          entryTextField(TextInputType.text, userNameontroller,
+              "Enter your Name", "Eg: Pablo West"),
           SizedBox(height: 10),
           textDropdown("Payment Mode", 30, 150, dropdownPaymentOpt,
               (String? value) {
@@ -362,7 +361,9 @@ class _PlaceOdrerState extends State<PlaceOdrer> {
               "foodAmt": "GHS ${widget.imagePrice}",
               "tableNum": tableNumController.text,
               "userName": userNameontroller.text,
-              "paymentOption": dropdownPaymentOpt
+              "paymentOption": dropdownPaymentOpt,
+              "kitchenMode": 'false',
+              "deliveredMode": 'false'
             };
             DatabaseMethods().addOrder(orderInfoMap, id).then((value) {
               Fluttertoast.showToast(
@@ -384,12 +385,13 @@ class _PlaceOdrerState extends State<PlaceOdrer> {
     );
   }
 
-  Widget entryTextField(controller, lableText, textHint) {
+  Widget entryTextField(keyboardType, controller, lableText, textHint) {
     return Container(
       margin: EdgeInsets.zero,
       padding: EdgeInsets.zero,
       child: TextFormField(
           textInputAction: TextInputAction.next,
+          keyboardType: keyboardType,
           controller: controller,
           style: TextStyle(fontSize: 13),
           decoration: ThemeHelper().textInputDecoration(

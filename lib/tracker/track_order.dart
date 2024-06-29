@@ -1,4 +1,4 @@
-// ignore_for_file: avoid_print, unused_local_variable, prefer_const_constructors, use_super_parameters
+// ignore_for_file: avoid_print
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -7,11 +7,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../global.dart';
 import '../model/app_responsive.dart';
 
+import '../orders/database.dart';
 import 'display_tracked_order.dart';
 
 class OrderTracker extends StatefulWidget {
   final String orderId;
-  const OrderTracker({Key? key, required this.orderId}) : super(key: key);
+  const OrderTracker({super.key, required this.orderId});
 
   @override
   State<OrderTracker> createState() => _OrderTrackerState();
@@ -23,7 +24,6 @@ class _OrderTrackerState extends State<OrderTracker> {
   @override
   void initState() {
     super.initState();
-    // getOrderId();
     getontheload();
   }
 
@@ -40,7 +40,7 @@ class _OrderTrackerState extends State<OrderTracker> {
   }
 
   Future<void> getontheload() async {
-    // stockStream = await DatabaseMethods().getOrder();
+    stockStream = await DatabaseMethods().getOrder();
     setState(() {});
   }
 
@@ -53,9 +53,9 @@ class _OrderTrackerState extends State<OrderTracker> {
         builder: (context, AsyncSnapshot snapshot) {
           switch (snapshot.connectionState) {
             case ConnectionState.none:
-              return Text("ConnectionState.none");
+              return const Text("ConnectionState.none");
             case ConnectionState.waiting:
-              return CircularProgressIndicator();
+              return const CircularProgressIndicator();
             case ConnectionState.active:
             case ConnectionState.done:
               List<Widget> contentWidgets = [];
@@ -71,7 +71,7 @@ class _OrderTrackerState extends State<OrderTracker> {
                   ? ListView(
                       children: contentWidgets,
                     )
-                  : Center(
+                  : const Center(
                       child: Text("You have no order placed",
                           textAlign: TextAlign.center,
                           style: TextStyle(
@@ -87,7 +87,6 @@ class _OrderTrackerState extends State<OrderTracker> {
 
   void trackerCard(List<Widget> contentWidgets, BuildContext context,
       DocumentSnapshot<Object?> ds) {
-    // final MediaQueryData mediaQueryData = MediaQuery.of(context);
     String deliveredMode = "false";
     String kitchenMode = "false";
     try {

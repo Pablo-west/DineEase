@@ -3,6 +3,7 @@ import 'package:carousel_slider/carousel_slider.dart';
 import 'package:flutter/material.dart';
 
 import '../global.dart';
+import '../model/app_responsive.dart';
 import '../orders/place_order.dart';
 
 class PopularDish extends StatefulWidget {
@@ -67,20 +68,19 @@ class _PopularDishState extends State<PopularDish> {
       },
       itemCount: imagesPaths.length,
       options: CarouselOptions(
-        height: 280,
-        clipBehavior: Clip.none,
+        height: AppResponsive.isMobile(context) ? 120 : 230,
         enlargeCenterPage: true,
         enlargeStrategy: CenterPageEnlargeStrategy.height,
         autoPlay: true,
-        aspectRatio: 2 / 9,
-        enlargeFactor: 0.3,
-        viewportFraction: 0.3,
-        // reverse: true,
+        enlargeFactor: AppResponsive.isMobile(context) ? 0.2 : 0.1,
+        viewportFraction: AppResponsive.isMobile(context) ? 0.28 : 0.2,
         autoPlayInterval: Duration(seconds: 3),
-        // aspectRatio: 100 / 5,
         autoPlayCurve: Curves.fastOutSlowIn,
         enableInfiniteScroll: true,
         autoPlayAnimationDuration: const Duration(milliseconds: 800),
+        initialPage: 0,
+        reverse: false,
+        scrollDirection: Axis.horizontal,
       ),
     );
   }
@@ -108,47 +108,92 @@ class _PlaceOrderDialogState extends State<PlaceOrderDialog> {
     //A pop up to view more details of each dish selected
     return GestureDetector(
       onTap: () {
-        showDialog(
-          barrierDismissible: finalOrderId4 != null ? true : false,
-          context: context,
-          builder: (BuildContext context) {
-            return Dialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10.0),
-              ),
-              child: Container(
-                  width: double.infinity,
-                  height: finalOrderId4 != null
-                      ? 200
-                      : mediaQueryData.size.height / 1.2,
-                  padding: EdgeInsets.only(top: 16),
-                  child: finalOrderId4 == null
-                      ? PlaceOdrer(
-                          imagePath: widget.imagePath,
-                          foodName: widget.foodName,
-                          imagePrice: widget.imagePrice,
-                        )
-                      : Center(
-                          child: Text(
-                          textAlign: TextAlign.center,
-                          "Your orders are pending. Kindly wait to be served\nThank You.",
-                          style: TextStyle(
-                              fontStyle: FontStyle.italic,
-                              fontSize: 25,
-                              fontWeight: FontWeight.bold),
-                        ))),
-            );
-          },
-        );
+        if (!AppResponsive.isMobile(context)) {
+          viewDesktop(context, mediaQueryData);
+        }
+
+        if (AppResponsive.isMobile(context)) {
+          showMobile(context);
+        }
       },
       child: Container(
-          height: 10,
-          margin: EdgeInsets.all(10),
+          // height: 5,
+          margin: AppResponsive.isMobile(context)
+              ? EdgeInsets.all(5)
+              : EdgeInsets.all(10),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(100),
             image: DecorationImage(
                 image: AssetImage(widget.imagePath), fit: BoxFit.cover),
           )),
     );
+  }
+
+  Future<dynamic> viewDesktop(
+      BuildContext context, MediaQueryData mediaQueryData) {
+    return showDialog(
+      barrierDismissible: finalOrderId4 != null ? true : false,
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10.0),
+          ),
+          child: Container(
+              width: double.infinity,
+              height: finalOrderId4 != null
+                  ? 200
+                  : mediaQueryData.size.height / 1.2,
+              padding: EdgeInsets.only(top: 16),
+              child: finalOrderId4 == null
+                  ? PlaceOdrer(
+                      imagePath: widget.imagePath,
+                      foodName: widget.foodName,
+                      imagePrice: widget.imagePrice,
+                    )
+                  : Center(
+                      child: Text(
+                      textAlign: TextAlign.center,
+                      "Your orders are pending. Kindly wait to be served\nThank You.",
+                      style: TextStyle(
+                          fontStyle: FontStyle.italic,
+                          fontSize: 25,
+                          fontWeight: FontWeight.bold),
+                    ))),
+        );
+      },
+    );
+  }
+
+  Future<dynamic> showMobile(BuildContext context) {
+    return showModalBottomSheet(
+        isDismissible: finalOrderId4 != null ? true : false,
+        isScrollControlled: true,
+        enableDrag: false,
+        useRootNavigator: true,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(
+          top: Radius.circular(22),
+        )),
+        context: context,
+        builder: (context) {
+          return SizedBox(
+            child: finalOrderId4 == null
+                ? PlaceOdrer(
+                    imagePath: widget.imagePath,
+                    foodName: widget.foodName,
+                    imagePrice: widget.imagePrice,
+                  )
+                : Center(
+                    child: Text(
+                    textAlign: TextAlign.center,
+                    "Your orders are pending. Kindly wait to be served\nThank You.",
+                    style: TextStyle(
+                        fontStyle: FontStyle.italic,
+                        fontSize: 25,
+                        fontWeight: FontWeight.bold),
+                  )),
+          );
+        });
   }
 }

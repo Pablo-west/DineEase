@@ -64,7 +64,7 @@ class _DisplayTrackedOrderState extends State<DisplayTrackedOrder> {
     }
     //renders the stages of the order to the mealStage string
     if (deliveredMode == true) {
-      String mealStage = "Delivered Stage";
+      String mealStage = "Delivering Stage";
       getOrderId();
       trakerStage = mealStage;
     } else if (kitchenMode == true) {
@@ -126,7 +126,7 @@ class _DisplayTrackedOrderState extends State<DisplayTrackedOrder> {
                                 : offProcessState("Kitchen")),
                         SizedBox(
                             child: deliveredMode
-                                ? Text("Delivered",
+                                ? Text("Delivering",
                                     style: TextStyle(
                                         color: Colors.orangeAccent,
                                         fontWeight: FontWeight.w600,
@@ -134,7 +134,7 @@ class _DisplayTrackedOrderState extends State<DisplayTrackedOrder> {
                                             AppResponsive.isBMobile(context)
                                                 ? 15.5
                                                 : 11))
-                                : Text("Delivered",
+                                : Text("Delivering",
                                     style: TextStyle(
                                         color: Colors.grey,
                                         fontWeight: FontWeight.w600,
