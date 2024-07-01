@@ -1,17 +1,18 @@
-// ignore_for_file: avoid_print, unused_local_variable, prefer_const_constructors, use_super_parameters
+// ignore_for_file: avoid_print
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
-import '../global.dart';
+// import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_spinkit/flutter_spinkit.dart';
+// import '../global.dart';
 import '../model/app_responsive.dart';
 
+import '../orders/database.dart';
 import 'display_tracked_order.dart';
 
 class OrderTracker extends StatefulWidget {
   final String orderId;
-  const OrderTracker({Key? key, required this.orderId}) : super(key: key);
+  const OrderTracker({super.key, required this.orderId});
 
   @override
   State<OrderTracker> createState() => _OrderTrackerState();
@@ -23,39 +24,43 @@ class _OrderTrackerState extends State<OrderTracker> {
   @override
   void initState() {
     super.initState();
-    // getOrderId();
     getontheload();
   }
 
-  Future<void> getOrderId() async {
-    final SharedPreferences pref = await SharedPreferences.getInstance();
-    var obtainedOrderId = pref.getString('userOrderId');
+  // Future<void> getOrderId() async {
+  //   final SharedPreferences pref = await SharedPreferences.getInstance();
+  //   var obtainedOrderId = pref.getString('userOrderId');
 
-    if (obtainedOrderId != null) {
-      setState(() {
-        finalOrderId = obtainedOrderId;
-        print(finalOrderId);
-      });
-    }
-  }
+  //   if (obtainedOrderId != null) {
+  //     setState(() {
+  //       finalOrderId = obtainedOrderId;
+  //       print(finalOrderId);
+  //     });
+  //   }
+  // }
 
   Future<void> getontheload() async {
-    // stockStream = await DatabaseMethods().getOrder();
+    stockStream = await DatabaseMethods().getOrder();
     setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: double.infinity,
-      height: AppResponsive.isBMobile(context) ? 300 : 400,
+      width: 600,
+      height: AppResponsive.isBMobile(context) ? 350 : 450,
       child: StreamBuilder(
         builder: (context, AsyncSnapshot snapshot) {
           switch (snapshot.connectionState) {
             case ConnectionState.none:
-              return Text("ConnectionState.none");
+              return const Text("ConnectionState.none");
             case ConnectionState.waiting:
-              return CircularProgressIndicator();
+              return const Center(
+                  child: SpinKitSpinningLines(
+                color: Colors.black,
+                size: 40.0,
+                duration: Duration(milliseconds: 2000),
+              ));
             case ConnectionState.active:
             case ConnectionState.done:
               List<Widget> contentWidgets = [];
@@ -71,7 +76,7 @@ class _OrderTrackerState extends State<OrderTracker> {
                   ? ListView(
                       children: contentWidgets,
                     )
-                  : Center(
+                  : const Center(
                       child: Text("You have no order placed",
                           textAlign: TextAlign.center,
                           style: TextStyle(
@@ -87,7 +92,6 @@ class _OrderTrackerState extends State<OrderTracker> {
 
   void trackerCard(List<Widget> contentWidgets, BuildContext context,
       DocumentSnapshot<Object?> ds) {
-    // final MediaQueryData mediaQueryData = MediaQuery.of(context);
     String deliveredMode = "false";
     String kitchenMode = "false";
     try {

@@ -1,5 +1,7 @@
 // ignore_for_file: prefer_const_literals_to_create_immutables, prefer_const_constructors, avoid_print
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -26,9 +28,25 @@ class _DisplayTrackedOrderState extends State<DisplayTrackedOrder> {
   bool kitchenMode = false;
   bool deliveredMode = false;
   String trakerStage = "";
+  // String? deliveryTimer;
+  Timer? _timer;
+  // int _seconds = 0;
 
   Future<void> getOrderId() async {
-    await Future.delayed(Duration(seconds: duration));
+    // if (timerCount == 0) {
+    for (timerCount; timerCount <= 60; timerCount++) {
+      if (mounted) {
+        setState(() {
+          deliveryTimer = timerCount.toString().padLeft(2, '0');
+          timerCount = int.parse(deliveryTimer!);
+          print(deliveryTimer); // Prints the current second in two digits
+          print("timerCount: $timerCount");
+        });
+        await Future.delayed(Duration(seconds: 1)); // Waits for 1 second
+      }
+    }
+
+    await Future.delayed(Duration(seconds: duration * 2)); // Waits for 1 second
 
     final SharedPreferences pref = await SharedPreferences.getInstance();
 
@@ -64,7 +82,7 @@ class _DisplayTrackedOrderState extends State<DisplayTrackedOrder> {
     }
     //renders the stages of the order to the mealStage string
     if (deliveredMode == true) {
-      String mealStage = "Delivered Stage";
+      String mealStage = "Delivering Stage";
       getOrderId();
       trakerStage = mealStage;
     } else if (kitchenMode == true) {
@@ -78,6 +96,12 @@ class _DisplayTrackedOrderState extends State<DisplayTrackedOrder> {
   }
 
   @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return ListView(
       // mainAxisSize: MainAxisSize.min,
@@ -85,6 +109,13 @@ class _DisplayTrackedOrderState extends State<DisplayTrackedOrder> {
         Row(
           mainAxisAlignment: MainAxisAlignment.start,
           children: [
+            if (deliveredMode == true)
+              Expanded(
+                  flex: 1,
+                  child: Padding(
+                    padding: EdgeInsets.only(left: 10),
+                    child: Text("$deliveryTimer sec"),
+                  )),
             Expanded(flex: 3, child: Container()),
 
             Expanded(
@@ -126,7 +157,7 @@ class _DisplayTrackedOrderState extends State<DisplayTrackedOrder> {
                                 : offProcessState("Kitchen")),
                         SizedBox(
                             child: deliveredMode
-                                ? Text("Delivered",
+                                ? Text("Delivering",
                                     style: TextStyle(
                                         color: Colors.orangeAccent,
                                         fontWeight: FontWeight.w600,
@@ -134,7 +165,7 @@ class _DisplayTrackedOrderState extends State<DisplayTrackedOrder> {
                                             AppResponsive.isBMobile(context)
                                                 ? 15.5
                                                 : 11))
-                                : Text("Delivered",
+                                : Text("Delivering",
                                     style: TextStyle(
                                         color: Colors.grey,
                                         fontWeight: FontWeight.w600,
@@ -204,6 +235,17 @@ class _DisplayTrackedOrderState extends State<DisplayTrackedOrder> {
                       )),
           ),
         ),
+        if (deliveredMode == true)
+          Container(
+            margin: EdgeInsets.symmetric(horizontal: 20),
+            child: Padding(
+              padding: const EdgeInsets.only(top: 15),
+              child: Center(
+                  child: listingItems(
+                      "Your meal will be delivered in less than ",
+                      "$duration sec")),
+            ),
+          ),
       ],
     );
   }

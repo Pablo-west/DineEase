@@ -7,12 +7,17 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:simple_speed_dial/simple_speed_dial.dart';
 
 import 'global.dart';
 
+import 'menu list/menu_list.dart';
 import 'model/app_responsive.dart';
+import 'model/theme_helper.dart';
+import 'popular dish/popular_dish.dart';
+import 'staff/staff_dashboard_main.dart';
 import 'tracker/track_order.dart';
 // import 'package:google_fonts/google_fonts.dart';
 
@@ -20,11 +25,11 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (kIsWeb) {
     await Firebase.initializeApp(
-        options: FirebaseOptions(
-            apiKey: "AIzaSyBhZw8FsHp1_VmcG81DXZ9XqPbc7-Uz41g",
-            appId: "1:1087992874835:web:7f7e85e68e40fbd21283a6",
-            messagingSenderId: "1087992874835",
-            projectId: "menumate-ce7ae"));
+        options: const FirebaseOptions(
+            apiKey: "AIzaSyBKC3GD_3Bcdf7u7lrHVffyMaqVDJ-Mr-o",
+            appId: "1:328696000707:web:6fbd18df36b31ca219f276",
+            messagingSenderId: "G-FKD3GQ32BS",
+            projectId: "dineease-f81e5"));
   }
 
   runApp(const MyApp());
@@ -36,7 +41,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'MenuMate',
+      title: 'DineEase',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
@@ -154,27 +159,38 @@ class _MyHomePageState extends State<MyHomePage>
         //a floating button activated when order is made
         floatingActionButton: Builder(builder: (context) {
           return Builder(builder: (context) {
-            return SpeedDial(
-              controller: animationController,
-              openBackgroundColor: Colors.white,
-              child: Icon(Icons.shopping_cart),
-              closedForegroundColor: Colors.white,
-              openForegroundColor: Colors.black,
-              closedBackgroundColor: Colors.black,
-              speedDialChildren: [
-                speedDialFoodList4(context, finalOrderId4.toString()),
-                speedDialFoodList3(context, finalOrderId3.toString()),
-                speedDialFoodList2(context, finalOrderId2.toString()),
-                speedDialFoodList1(context, finalOrderId1.toString()),
-                speedDialFoodList(context, finalOrderId.toString()),
-              ],
+            return GestureDetector(
+              onTap: () {
+                setState(() {
+                  finalOrderId;
+                  finalOrderId1;
+                  finalOrderId2;
+                  finalOrderId3;
+                  finalOrderId4;
+                });
+              },
+              child: SpeedDial(
+                controller: animationController,
+                openBackgroundColor: Colors.white,
+                child: Icon(Icons.shopping_cart),
+                closedForegroundColor: Colors.white,
+                openForegroundColor: Colors.black,
+                closedBackgroundColor: Colors.black,
+                speedDialChildren: [
+                  speedDialFoodList4(context, finalOrderId4.toString()),
+                  speedDialFoodList3(context, finalOrderId3.toString()),
+                  speedDialFoodList2(context, finalOrderId2.toString()),
+                  speedDialFoodList1(context, finalOrderId1.toString()),
+                  speedDialFoodList(context, finalOrderId.toString()),
+                ],
+              ),
             );
           });
         }),
         body: Theme(
           data: Theme.of(context).copyWith(
             scrollbarTheme: ScrollbarThemeData(
-                thumbColor: MaterialStateProperty.all(Colors.black54),
+                thumbColor: WidgetStateProperty.all(Colors.black54),
                 crossAxisMargin: 5),
           ),
           child: Scrollbar(
@@ -258,35 +274,38 @@ class _MyHomePageState extends State<MyHomePage>
                   child: Text(
                     "Our Popular Dishes",
                     style: TextStyle(
-                        fontStyle: FontStyle.italic,
+                        // fontStyle: FontStyle.italic,
                         fontSize: 25,
                         fontWeight: FontWeight.bold),
                   ),
                 ),
                 Divider(
-                  indent: 200,
-                  endIndent: 200,
+                  indent: 100,
+                  endIndent: 100,
                   thickness: 3,
                 ),
-                SizedBox(height: 10),
-                // PopularDish(),
-                SizedBox(height: 10),
+                SizedBox(height: AppResponsive.isMobile(context) ? 5 : 10),
+
+                //slides of meal images and placing orders
+                PopularDish(),
+
+                SizedBox(height: AppResponsive.isMobile(context) ? 5 : 10),
                 Divider(
-                  indent: 200,
-                  endIndent: 200,
+                  indent: 100,
+                  endIndent: 100,
                   thickness: 3,
                 ),
                 SizedBox(height: AppResponsive.isMobile(context) ? 30 : 50),
 
                 // Listing menu
                 Center(
-                  child: Text(
-                    "Our Menu List",
-                    style: TextStyle(
-                        fontStyle: FontStyle.italic,
-                        fontSize: 25,
-                        fontWeight: FontWeight.bold),
-                  ),
+                  child: Text("Our Menu List",
+                      style: GoogleFonts.lobster(
+                        textStyle: TextStyle(
+                            // fontStyle: FontStyle.italic,
+                            fontSize: 25,
+                            fontWeight: FontWeight.bold),
+                      )),
                 ),
                 Container(
                   // padding: EdgeInsets.all(10),
@@ -294,20 +313,20 @@ class _MyHomePageState extends State<MyHomePage>
                       horizontal: AppResponsive.isTablet(context) ||
                               AppResponsive.isDesktop(context)
                           ? 200
-                          : 35),
+                          : 20),
                   height: AppResponsive.isTablet(context) ||
                           AppResponsive.isDesktop(context) ||
                           AppResponsive.isBMobile(context)
                       ? mediaQueryData.size.height
                       : mediaQueryData.size.height / 1.3,
-                  // width: 10,
-                  // child: Card(
-                  //     elevation: 5,
-                  //     child: Padding(
-                  //       padding: const EdgeInsets.symmetric(
-                  //           vertical: 15, horizontal: 5),
-                  //       child: MenuList(mediaQueryData: mediaQueryData),
-                  //     )),
+                  width: 10,
+                  child: Card(
+                      elevation: 5,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 15, horizontal: 5),
+                        child: MenuList(mediaQueryData: mediaQueryData),
+                      )),
                 ),
                 SizedBox(height: 50),
                 Divider(thickness: 3, color: Colors.brown),
@@ -333,7 +352,7 @@ class _MyHomePageState extends State<MyHomePage>
                               )
                             : Container(
                                 margin: EdgeInsets.symmetric(
-                                    horizontal: 70, vertical: 20),
+                                    horizontal: 20, vertical: 20),
                                 child: Column(
                                   children: [
                                     contactUs(),
@@ -376,6 +395,7 @@ class _MyHomePageState extends State<MyHomePage>
               ),
               child: Container(
                   height: finalOrderId == null ? 200 : null,
+                  width: 600,
                   margin: EdgeInsets.zero,
                   padding: EdgeInsets.only(top: 16),
                   child: finalOrderId != null
@@ -410,6 +430,7 @@ class _MyHomePageState extends State<MyHomePage>
               ),
               child: Container(
                   height: finalOrderId1 == null ? 200 : null,
+                  width: 600,
                   margin: EdgeInsets.zero,
                   padding: EdgeInsets.only(top: 16),
                   child: finalOrderId1 != null
@@ -445,6 +466,7 @@ class _MyHomePageState extends State<MyHomePage>
               child: Container(
                   height: finalOrderId2 == null ? 200 : null,
                   margin: EdgeInsets.zero,
+                  width: 600,
                   padding: EdgeInsets.only(top: 16),
                   child: finalOrderId2 != null
                       ? OrderTracker(
@@ -479,6 +501,7 @@ class _MyHomePageState extends State<MyHomePage>
               child: Container(
                   height: finalOrderId3 == null ? 200 : null,
                   margin: EdgeInsets.zero,
+                  width: 600,
                   padding: EdgeInsets.only(top: 16),
                   child: finalOrderId3 != null
                       ? OrderTracker(
@@ -513,6 +536,7 @@ class _MyHomePageState extends State<MyHomePage>
               child: Container(
                   height: finalOrderId4 == null ? 200 : null,
                   margin: EdgeInsets.zero,
+                  width: 600,
                   padding: EdgeInsets.only(top: 16),
                   child: finalOrderId4 != null
                       ? OrderTracker(
@@ -532,7 +556,7 @@ class _MyHomePageState extends State<MyHomePage>
         child: Text("No Order Listed",
             textAlign: TextAlign.center,
             style: TextStyle(
-                fontStyle: FontStyle.italic,
+                // fontStyle: FontStyle.italic,
                 fontSize: 25,
                 fontWeight: FontWeight.bold)));
   }
@@ -579,7 +603,7 @@ class _MyHomePageState extends State<MyHomePage>
                           "You are trying to access a restricted page. Kindly enter the password to gain access to the Admin page",
                           style: TextStyle(fontSize: 14)),
                       SizedBox(height: 15),
-                      // settingPassword(),
+                      settingPassword(),
                     ],
                   ),
                 ),
@@ -594,23 +618,25 @@ class _MyHomePageState extends State<MyHomePage>
                 ElevatedButton(
                   style: ButtonStyle(
                     backgroundColor:
-                        MaterialStateProperty.all<Color>(Color(0xff131e29)),
+                        WidgetStateProperty.all<Color>(Color(0xff131e29)),
                     foregroundColor:
-                        MaterialStateProperty.all<Color>(Colors.white),
+                        WidgetStateProperty.all<Color>(Colors.white),
                   ),
                   child: Text('Access'),
                   onPressed: () {
-                    // if (_formKey.currentState!.validate()) {
-                    //   Navigator.of(context).push(
-                    //     MaterialPageRoute(
-                    //         builder: (context) => const StaffDashboard()),
-                    //   );
-                    //   // Navigator.of().pop();
-                    //   // if (!AppResponsive.isDesktop(context)) {
-                    //   //   Navigator.of(context).pop();
-                    //   // }
-                    //   setPassword.clear();
-                    // }
+                    if (_formKey.currentState!.validate()) {
+                      Navigator.of(context).pop();
+
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                            builder: (context) => const StaffDashboard()),
+                      );
+                      // Navigator.of().pop();
+                      // if (!AppResponsive.isDesktop(context)) {
+                      //   Navigator.of(context).pop();
+                      // }
+                      setPassword.clear();
+                    }
                   },
                 ),
               ],
@@ -619,33 +645,33 @@ class _MyHomePageState extends State<MyHomePage>
         });
   }
 
-  // Container settingPassword() {
-  //   return Container(
-  //     decoration: ThemeHelper().inputBoxDecorationShaddow(),
-  //     child: TextFormField(
-  //         textInputAction: TextInputAction.done,
-  //         obscureText: obscurePassword,
-  //         keyboardType: TextInputType.text,
-  //         controller: setPassword,
-  //         onFieldSubmitted: (value) {
-  //           FocusScope.of(context).requestFocus(loginButton);
-  //         },
-  //         decoration: ThemeHelper().textInputDecoration(
-  //           "Password*",
-  //           "Password*",
-  //           "",
-  //           const Icon(Icons.lock_outline),
-  //         ),
-  //         validator: (value) {
-  //           if (value!.isEmpty) {
-  //             return kPassNullError;
-  //           } else if (value != settingsPin) {
-  //             return "Invalid Password";
-  //           }
-  //           return null;
-  //         }),
-  //   );
-  // }
+  Container settingPassword() {
+    return Container(
+      decoration: ThemeHelper().inputBoxDecorationShaddow(),
+      child: TextFormField(
+          textInputAction: TextInputAction.done,
+          obscureText: obscurePassword,
+          keyboardType: TextInputType.text,
+          controller: setPassword,
+          onFieldSubmitted: (value) {
+            FocusScope.of(context).requestFocus(loginButton);
+          },
+          decoration: ThemeHelper().textInputDecoration(
+            "Password*",
+            "Password*",
+            "",
+            const Icon(Icons.lock_outline),
+          ),
+          validator: (value) {
+            if (value!.isEmpty) {
+              return kPassNullError;
+            } else if (value != settingsPin) {
+              return "Invalid Password";
+            }
+            return null;
+          }),
+    );
+  }
 
   Widget openHours() {
     return Column(
@@ -669,7 +695,7 @@ class _MyHomePageState extends State<MyHomePage>
         footerHeadTitle("Contact Us"),
         contactListItem(
             Icon(Icons.phone), "+233-00-000-0000\n+233-00-000-0000"),
-        contactListItem(Icon(Icons.email_outlined), "menucook@mate.org"),
+        contactListItem(Icon(Icons.email_outlined), "menucook@dineease.org"),
         contactListItem(Icon(Icons.location_on_outlined),
             "52/1, Hasan Holdings, New\nEskaton Road, Dhaka, Bangladesh"),
       ],

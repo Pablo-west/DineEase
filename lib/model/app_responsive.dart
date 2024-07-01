@@ -25,10 +25,10 @@ class AppResponsive extends StatelessWidget {
   /// This size work for my design, maybe you need some changes depend on your design
   /// make function that can help us later
   // static bool isNMobile(context) => MediaQuery.of(context).size.width < 330;
-  static bool isAMobile(context) => MediaQuery.of(context).size.width < 330;
-  static bool isBMobile(context) => MediaQuery.of(context).size.width > 600;
+  static bool isAMobile(context) => MediaQuery.of(context).size.width < 530;
+  static bool isBMobile(context) => MediaQuery.of(context).size.width > 680;
   static bool isCMobile(context) => MediaQuery.of(context).size.width > 750;
-  static bool isMobile(context) => MediaQuery.of(context).size.width < 990;
+  static bool isMobile(context) => MediaQuery.of(context).size.width < 680;
   static bool isTablet(context) =>
       MediaQuery.of(context).size.width < 1250 &&
       MediaQuery.of(context).size.width >= 990;

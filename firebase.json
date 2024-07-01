@@ -1,6 +1,6 @@
 {
   "emulators": {
-    "singleProjectMode": true
+    "singleProjectMode": false
   },
   "hosting": {
     "public": "build/web",
