@@ -143,7 +143,7 @@ class _PlaceOdrerState extends State<PlaceOdrer> {
     return Column(
       children: [
         SizedBox(
-          height: 150,
+          height: 180,
           //food image
           child: foodLabel(widget.imagePath, widget.foodName),
         ),

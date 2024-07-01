@@ -204,17 +204,19 @@ class _MyHomePageState extends State<MyHomePage>
                 //Header banner & logo
                 Container(
                   width: mediaQueryData.size.width,
+                  // height: mediaQueryData.size.height / 1.3,
                   clipBehavior: Clip.none,
                   child: Card(
                     margin: EdgeInsets.zero,
-                    elevation: 20,
+                    elevation: 1,
                     child: Image.asset(
-                      'assets/banners/banner3.png',
-                      scale: 3,
+                      'assets/banners/banner4.png',
+                      // scale: 30,
                       fit: BoxFit.cover,
                     ),
                   ),
                 ),
+
                 SizedBox(height: 30),
 
                 //About section
