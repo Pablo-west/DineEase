@@ -7,6 +7,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:simple_speed_dial/simple_speed_dial.dart';
 
@@ -158,20 +159,31 @@ class _MyHomePageState extends State<MyHomePage>
         //a floating button activated when order is made
         floatingActionButton: Builder(builder: (context) {
           return Builder(builder: (context) {
-            return SpeedDial(
-              controller: animationController,
-              openBackgroundColor: Colors.white,
-              child: Icon(Icons.shopping_cart),
-              closedForegroundColor: Colors.white,
-              openForegroundColor: Colors.black,
-              closedBackgroundColor: Colors.black,
-              speedDialChildren: [
-                speedDialFoodList4(context, finalOrderId4.toString()),
-                speedDialFoodList3(context, finalOrderId3.toString()),
-                speedDialFoodList2(context, finalOrderId2.toString()),
-                speedDialFoodList1(context, finalOrderId1.toString()),
-                speedDialFoodList(context, finalOrderId.toString()),
-              ],
+            return GestureDetector(
+              onTap: () {
+                setState(() {
+                  finalOrderId;
+                  finalOrderId1;
+                  finalOrderId2;
+                  finalOrderId3;
+                  finalOrderId4;
+                });
+              },
+              child: SpeedDial(
+                controller: animationController,
+                openBackgroundColor: Colors.white,
+                child: Icon(Icons.shopping_cart),
+                closedForegroundColor: Colors.white,
+                openForegroundColor: Colors.black,
+                closedBackgroundColor: Colors.black,
+                speedDialChildren: [
+                  speedDialFoodList4(context, finalOrderId4.toString()),
+                  speedDialFoodList3(context, finalOrderId3.toString()),
+                  speedDialFoodList2(context, finalOrderId2.toString()),
+                  speedDialFoodList1(context, finalOrderId1.toString()),
+                  speedDialFoodList(context, finalOrderId.toString()),
+                ],
+              ),
             );
           });
         }),
@@ -262,7 +274,7 @@ class _MyHomePageState extends State<MyHomePage>
                   child: Text(
                     "Our Popular Dishes",
                     style: TextStyle(
-                        fontStyle: FontStyle.italic,
+                        // fontStyle: FontStyle.italic,
                         fontSize: 25,
                         fontWeight: FontWeight.bold),
                   ),
@@ -273,7 +285,10 @@ class _MyHomePageState extends State<MyHomePage>
                   thickness: 3,
                 ),
                 SizedBox(height: AppResponsive.isMobile(context) ? 5 : 10),
+
+                //slides of meal images and placing orders
                 PopularDish(),
+
                 SizedBox(height: AppResponsive.isMobile(context) ? 5 : 10),
                 Divider(
                   indent: 100,
@@ -284,13 +299,13 @@ class _MyHomePageState extends State<MyHomePage>
 
                 // Listing menu
                 Center(
-                  child: Text(
-                    "Our Menu List",
-                    style: TextStyle(
-                        fontStyle: FontStyle.italic,
-                        fontSize: 25,
-                        fontWeight: FontWeight.bold),
-                  ),
+                  child: Text("Our Menu List",
+                      style: GoogleFonts.lobster(
+                        textStyle: TextStyle(
+                            // fontStyle: FontStyle.italic,
+                            fontSize: 25,
+                            fontWeight: FontWeight.bold),
+                      )),
                 ),
                 Container(
                   // padding: EdgeInsets.all(10),
@@ -380,6 +395,7 @@ class _MyHomePageState extends State<MyHomePage>
               ),
               child: Container(
                   height: finalOrderId == null ? 200 : null,
+                  width: 600,
                   margin: EdgeInsets.zero,
                   padding: EdgeInsets.only(top: 16),
                   child: finalOrderId != null
@@ -414,6 +430,7 @@ class _MyHomePageState extends State<MyHomePage>
               ),
               child: Container(
                   height: finalOrderId1 == null ? 200 : null,
+                  width: 600,
                   margin: EdgeInsets.zero,
                   padding: EdgeInsets.only(top: 16),
                   child: finalOrderId1 != null
@@ -449,6 +466,7 @@ class _MyHomePageState extends State<MyHomePage>
               child: Container(
                   height: finalOrderId2 == null ? 200 : null,
                   margin: EdgeInsets.zero,
+                  width: 600,
                   padding: EdgeInsets.only(top: 16),
                   child: finalOrderId2 != null
                       ? OrderTracker(
@@ -483,6 +501,7 @@ class _MyHomePageState extends State<MyHomePage>
               child: Container(
                   height: finalOrderId3 == null ? 200 : null,
                   margin: EdgeInsets.zero,
+                  width: 600,
                   padding: EdgeInsets.only(top: 16),
                   child: finalOrderId3 != null
                       ? OrderTracker(
@@ -517,6 +536,7 @@ class _MyHomePageState extends State<MyHomePage>
               child: Container(
                   height: finalOrderId4 == null ? 200 : null,
                   margin: EdgeInsets.zero,
+                  width: 600,
                   padding: EdgeInsets.only(top: 16),
                   child: finalOrderId4 != null
                       ? OrderTracker(
@@ -536,7 +556,7 @@ class _MyHomePageState extends State<MyHomePage>
         child: Text("No Order Listed",
             textAlign: TextAlign.center,
             style: TextStyle(
-                fontStyle: FontStyle.italic,
+                // fontStyle: FontStyle.italic,
                 fontSize: 25,
                 fontWeight: FontWeight.bold)));
   }
@@ -605,6 +625,8 @@ class _MyHomePageState extends State<MyHomePage>
                   child: Text('Access'),
                   onPressed: () {
                     if (_formKey.currentState!.validate()) {
+                      Navigator.of(context).pop();
+
                       Navigator.of(context).push(
                         MaterialPageRoute(
                             builder: (context) => const StaffDashboard()),

@@ -8,8 +8,9 @@ import '../main.dart';
 import '../model/app_responsive.dart';
 
 class HeaderWidget extends StatefulWidget {
-  final String title;
-  const HeaderWidget({super.key, required this.title});
+  const HeaderWidget({
+    super.key,
+  });
 
   @override
   _HeaderWidgetState createState() => _HeaderWidgetState();
@@ -57,7 +58,7 @@ class _HeaderWidgetState extends State<HeaderWidget> {
               Container(
                 // padding: const EdgeInsets.all(8.0),
                 child: userName == null
-                    ? Text('Username',
+                    ? Text('Admin',
                         style: TextStyle(
                             fontSize: AppResponsive.isTablet(context) ||
                                     AppResponsive.isDesktop(context)

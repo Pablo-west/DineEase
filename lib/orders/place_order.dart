@@ -1,10 +1,11 @@
 // ignore_for_file: prefer_const_constructors, prefer_const_literals_to_create_immutables, avoid_print
 
 import 'package:flutter/material.dart';
+import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
-import 'package:shared_preferences/shared_preferences.dart';
+// import 'package:shared_preferences/shared_preferences.dart';
 
 import '../global.dart';
 
@@ -35,31 +36,32 @@ class _PlaceOdrerState extends State<PlaceOdrer> {
   final TextEditingController userNameontroller = TextEditingController();
   final TextEditingController paymentOptionController = TextEditingController();
   final formKey = GlobalKey<FormState>();
+  bool isLoading = false;
 
-  void incrementCounter(String mealNum) {
-    setState(() {
-      if (obtainedOrderId == null) {
-        finalOrderId = mealNum;
-      } else if (obtainedOrderId1 == null) {
-        finalOrderId1 = mealNum;
-      } else if (obtainedOrderId2 == null) {
-        finalOrderId2 = mealNum;
-      } else if (obtainedOrderId3 == null) {
-        finalOrderId3 = mealNum;
-      } else if (obtainedOrderId4 == null) {
-        finalOrderId4 = mealNum;
-      } else {
-        finalOrderId5 = mealNum;
-      }
-      setState(() {
-        finalOrderId;
-        finalOrderId1;
-        finalOrderId2;
-        finalOrderId3;
-        finalOrderId4;
-      });
-    });
-  }
+  // void incrementCounter(String mealNum) {
+  //   setState(() {
+  //     if (obtainedOrderId == null) {
+  //       finalOrderId = mealNum;
+  //     } else if (obtainedOrderId1 == null) {
+  //       finalOrderId1 = mealNum;
+  //     } else if (obtainedOrderId2 == null) {
+  //       finalOrderId2 = mealNum;
+  //     } else if (obtainedOrderId3 == null) {
+  //       finalOrderId3 = mealNum;
+  //     } else if (obtainedOrderId4 == null) {
+  //       finalOrderId4 = mealNum;
+  //     } else {
+  //       finalOrderId5 = mealNum;
+  //     }
+  //     setState(() {
+  //       finalOrderId;
+  //       finalOrderId1;
+  //       finalOrderId2;
+  //       finalOrderId3;
+  //       finalOrderId4;
+  //     });
+  //   });
+  // }
 
   @override
   Widget build(BuildContext context) {
@@ -335,52 +337,76 @@ class _PlaceOdrerState extends State<PlaceOdrer> {
     ]));
   }
 
-  Row rowActionButton(BuildContext context) {
+  Row rowActionButton(context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        actionButton(() {
-          Navigator.of(context).pop();
-        }, Colors.grey, "Cancel".toUpperCase()),
-        actionButton(() async {
-          String id = DateTime.now().toString();
-          String mealNum = DateTime.now().millisecond.toString();
-          // print("Id : $id");
-          // print("mealNum : $mealNum");
-          if (formKey.currentState!.validate()) {
-            // print(tableNumController.text);
-            // print(userNameontroller.text);
-            // print(dropdownPaymentOpt);
-
-            storeOrderId(mealNum);
-            incrementCounter(mealNum);
-            Map<String, dynamic> orderInfoMap = {
-              "timestamp": id,
-              "mealNum": mealNum,
-              "food": widget.foodName,
-              "foodAmt": "GHS ${widget.imagePrice}",
-              "tableNum": tableNumController.text,
-              "userName": userNameontroller.text,
-              "paymentOption": dropdownPaymentOpt,
-              "kitchenMode": 'false',
-              "deliveredMode": 'false'
-            };
-            DatabaseMethods().addOrder(orderInfoMap, id).then((value) {
-              Fluttertoast.showToast(
-                  msg: "✔ Your order has been placed Successfully",
-                  toastLength: Toast.LENGTH_SHORT,
-                  gravity: ToastGravity.CENTER,
-                  timeInSecForIosWeb: 3,
-                  backgroundColor: Colors.greenAccent,
-                  textColor: Colors.white,
-                  fontSize: 15.0);
-            });
-
+        if (isLoading != true)
+          actionButton(() {
             Navigator.of(context).pop();
-          } else {
-            unfilledField(context);
-          }
-        }, Colors.green, " Order ".toUpperCase())
+          }, Colors.grey, "Cancel".toUpperCase()),
+        isLoading
+            ? Center(
+                child: SpinKitThreeBounce(
+                  color: Colors.black45,
+                  size: 30.0,
+                  duration: Duration(milliseconds: 900),
+                ),
+              )
+            : actionButton(() async {
+                setState(() {
+                  isLoading = true;
+                });
+
+                String id = DateTime.now().toString();
+                String mealNum = DateTime.now().millisecond.toString();
+
+                if (formKey.currentState!.validate()) {
+                  Map<String, dynamic> orderInfoMap = {
+                    "timestamp": id,
+                    "mealNum": mealNum,
+                    "food": widget.foodName,
+                    "foodAmt": "GHS ${widget.imagePrice}",
+                    "tableNum": tableNumController.text,
+                    "userName": userNameontroller.text,
+                    "paymentOption": dropdownPaymentOpt,
+                    "kitchenMode": 'false',
+                    "deliveredMode": 'false'
+                  };
+                  await DatabaseMethods()
+                      .addOrder(orderInfoMap, id)
+                      .then((value) {
+                    Fluttertoast.showToast(
+                        msg: "✔ Your order has been placed Successfully",
+                        toastLength: Toast.LENGTH_SHORT,
+                        gravity: ToastGravity.CENTER,
+                        timeInSecForIosWeb: 3,
+                        backgroundColor: Colors.greenAccent,
+                        textColor: Colors.white,
+                        fontSize: 15.0);
+                    storeOrderId(mealNum);
+                    incrementCounter(mealNum);
+                  }).catchError((error) {
+                    Fluttertoast.showToast(
+                      msg: "Error placing order: $error",
+                      toastLength: Toast.LENGTH_SHORT,
+                      gravity: ToastGravity.CENTER,
+                      timeInSecForIosWeb: 3,
+                      backgroundColor: Colors.redAccent,
+                      textColor: Colors.white,
+                      fontSize: 15.0,
+                    );
+                  });
+
+                  Navigator.of(context).pop();
+                } else {
+                  unfilledField(context);
+                }
+
+                setState(() {
+                  isLoading = false;
+                });
+              }, Colors.green, " Order ".toUpperCase()),
       ],
     );
   }
@@ -520,46 +546,46 @@ class _PlaceOdrerState extends State<PlaceOdrer> {
   }
 }
 
-void storeOrderId(String mealNum) async {
-  final SharedPreferences perf = await SharedPreferences.getInstance();
+// void storeOrderId(String mealNum) async {
+//   final SharedPreferences perf = await SharedPreferences.getInstance();
 
-  if (obtainedOrderId == null) {
-    // finalOrderId = mealNum;
-    obtainedOrderId = perf.setString('userOrderId', mealNum);
-    // print("0a: ${obtainedOrderId.toString()}");
+//   if (obtainedOrderId == null) {
+//     // finalOrderId = mealNum;
+//     obtainedOrderId = perf.setString('userOrderId', mealNum);
+//     // print("0a: ${obtainedOrderId.toString()}");
 
-    // print(0);
-  } else if (obtainedOrderId1 == null) {
-    String mealNum1 = mealNum;
-    obtainedOrderId1 = perf.setString('userOrderId1', mealNum1);
-    // print("1b: ${obtainedOrderId1.toString()}");
+//     // print(0);
+//   } else if (obtainedOrderId1 == null) {
+//     String mealNum1 = mealNum;
+//     obtainedOrderId1 = perf.setString('userOrderId1', mealNum1);
+//     // print("1b: ${obtainedOrderId1.toString()}");
 
-    // print(1);
-  } else if (obtainedOrderId2 == null) {
-    String mealNum2 = mealNum;
-    obtainedOrderId2 = perf.setString('userOrderId2', mealNum2);
-    // print("2b: ${obtainedOrderId2.toString()}");
+//     // print(1);
+//   } else if (obtainedOrderId2 == null) {
+//     String mealNum2 = mealNum;
+//     obtainedOrderId2 = perf.setString('userOrderId2', mealNum2);
+//     // print("2b: ${obtainedOrderId2.toString()}");
 
-    // print(2);
-  } else if (obtainedOrderId3 == null) {
-    String mealNum3 = mealNum;
+//     // print(2);
+//   } else if (obtainedOrderId3 == null) {
+//     String mealNum3 = mealNum;
 
-    obtainedOrderId3 = perf.setString('userOrderId3', mealNum3);
-    // print("3b: ${obtainedOrderId3.toString()}");
+//     obtainedOrderId3 = perf.setString('userOrderId3', mealNum3);
+//     // print("3b: ${obtainedOrderId3.toString()}");
 
-    // print(3);
-  } else if (obtainedOrderId4 == null) {
-    String mealNum4 = mealNum;
+//     // print(3);
+//   } else if (obtainedOrderId4 == null) {
+//     String mealNum4 = mealNum;
 
-    obtainedOrderId4 = perf.setString('userOrderId4', mealNum4);
-    // print("4b: ${obtainedOrderId4.toString()}");
+//     obtainedOrderId4 = perf.setString('userOrderId4', mealNum4);
+//     // print("4b: ${obtainedOrderId4.toString()}");
 
-    // print(4);
-  } else {
-    String mealNum5 = mealNum;
+//     // print(4);
+//   } else {
+//     String mealNum5 = mealNum;
 
-    // print(5);
-    obtainedOrderId5 = perf.setString('userOrderId5', mealNum5);
-    // print("5b: ${obtainedOrderId5.toString()}");
-  }
-}
+//     // print(5);
+//     obtainedOrderId5 = perf.setString('userOrderId5', mealNum5);
+//     // print("5b: ${obtainedOrderId5.toString()}");
+//   }
+// }

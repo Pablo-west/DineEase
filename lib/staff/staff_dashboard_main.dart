@@ -28,14 +28,14 @@ class _StaffDashboardState extends State<StaffDashboard> {
                 children: [
                   SizedBox(width: AppResponsive.isMobile(context) ? 0 : 50),
                   Text(
-                    'cheif @ MenuMate',
+                    'cheif @ DineEase',
                     style: TextStyle(
                         fontSize: AppResponsive.isMobile(context) ? 12 : 18),
                   ),
                 ],
               ),
             ),
-            actions: [HeaderWidget(title: "Pharm Application")],
+            actions: [HeaderWidget()],
           )),
       body: Container(
         margin: EdgeInsets.all(10),

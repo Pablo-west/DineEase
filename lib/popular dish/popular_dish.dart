@@ -78,9 +78,9 @@ class _PopularDishState extends State<PopularDish> {
         autoPlayCurve: Curves.fastOutSlowIn,
         enableInfiniteScroll: true,
         autoPlayAnimationDuration: const Duration(milliseconds: 800),
-        initialPage: 0,
+        // initialPage: 0,
         reverse: false,
-        scrollDirection: Axis.horizontal,
+        // scrollDirection: Axis.horizontal,
       ),
     );
   }
@@ -162,7 +162,15 @@ class _PlaceOrderDialogState extends State<PlaceOrderDialog> {
                     ))),
         );
       },
-    );
+    ).then((value) {
+      setState(() {
+        finalOrderId;
+        finalOrderId1;
+        finalOrderId2;
+        finalOrderId3;
+        finalOrderId4;
+      });
+    });
   }
 
   Future<dynamic> showMobile(BuildContext context) {
@@ -194,6 +202,14 @@ class _PlaceOrderDialogState extends State<PlaceOrderDialog> {
                         fontWeight: FontWeight.bold),
                   )),
           );
-        });
+        }).then((value) {
+      setState(() {
+        finalOrderId;
+        finalOrderId1;
+        finalOrderId2;
+        finalOrderId3;
+        finalOrderId4;
+      });
+    });
   }
 }

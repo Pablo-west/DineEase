@@ -2,9 +2,9 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
-import '../global.dart';
+// import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_spinkit/flutter_spinkit.dart';
+// import '../global.dart';
 import '../model/app_responsive.dart';
 
 import '../orders/database.dart';
@@ -27,17 +27,17 @@ class _OrderTrackerState extends State<OrderTracker> {
     getontheload();
   }
 
-  Future<void> getOrderId() async {
-    final SharedPreferences pref = await SharedPreferences.getInstance();
-    var obtainedOrderId = pref.getString('userOrderId');
+  // Future<void> getOrderId() async {
+  //   final SharedPreferences pref = await SharedPreferences.getInstance();
+  //   var obtainedOrderId = pref.getString('userOrderId');
 
-    if (obtainedOrderId != null) {
-      setState(() {
-        finalOrderId = obtainedOrderId;
-        print(finalOrderId);
-      });
-    }
-  }
+  //   if (obtainedOrderId != null) {
+  //     setState(() {
+  //       finalOrderId = obtainedOrderId;
+  //       print(finalOrderId);
+  //     });
+  //   }
+  // }
 
   Future<void> getontheload() async {
     stockStream = await DatabaseMethods().getOrder();
@@ -47,15 +47,20 @@ class _OrderTrackerState extends State<OrderTracker> {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: double.infinity,
-      height: AppResponsive.isBMobile(context) ? 300 : 400,
+      width: 600,
+      height: AppResponsive.isBMobile(context) ? 350 : 450,
       child: StreamBuilder(
         builder: (context, AsyncSnapshot snapshot) {
           switch (snapshot.connectionState) {
             case ConnectionState.none:
               return const Text("ConnectionState.none");
             case ConnectionState.waiting:
-              return const CircularProgressIndicator();
+              return const Center(
+                  child: SpinKitSpinningLines(
+                color: Colors.black,
+                size: 40.0,
+                duration: Duration(milliseconds: 2000),
+              ));
             case ConnectionState.active:
             case ConnectionState.done:
               List<Widget> contentWidgets = [];
