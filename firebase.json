@@ -1,7 +1,4 @@
 {
-  "emulators": {
-    "singleProjectMode": false
-  },
   "hosting": {
     "public": "build/web",
     "ignore": [

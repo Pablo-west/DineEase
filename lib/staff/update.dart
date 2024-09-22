@@ -179,7 +179,7 @@ class _UpdateOrderState extends State<UpdateOrder> {
     );
   }
 
-  void saveOrderInfo() {
+  void saveOrderInfo() async {
     Map<String, dynamic> orderInfoMap = {
       "timestamp": widget.id,
       "mealNum": widget.mealNumber,
@@ -192,7 +192,7 @@ class _UpdateOrderState extends State<UpdateOrder> {
       "deliveredMode": deliveredMode.toString(), // Convert bool to String
     };
 
-    DatabaseMethods().addOrder(orderInfoMap, widget.id).then((value) {
+    await DatabaseMethods().addOrder(orderInfoMap, widget.id).then((value) {
       Fluttertoast.showToast(
         msg: "✔ Successfully updated table: ${widget.tableNumber}",
         toastLength: Toast.LENGTH_SHORT,

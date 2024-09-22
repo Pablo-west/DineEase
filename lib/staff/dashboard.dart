@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_spinkit/flutter_spinkit.dart';
 
 import '../model/app_responsive.dart';
 import '../orders/database.dart';
@@ -73,7 +74,12 @@ class _DashboardBodyState extends State<DashboardBody> {
                   case ConnectionState.none:
                     return const Text("ConnectionState.none");
                   case ConnectionState.waiting:
-                    return const CircularProgressIndicator();
+                    return const Center(
+                        child: SpinKitSpinningLines(
+                      color: Colors.black,
+                      size: 40.0,
+                      duration: Duration(milliseconds: 2000),
+                    ));
                   case ConnectionState.active:
                   case ConnectionState.done:
                     if (snapshot.hasData && snapshot.data.docs.isNotEmpty) {
@@ -107,7 +113,7 @@ class _DashboardBodyState extends State<DashboardBody> {
                         DocumentSnapshot ds = filteredDocs[i];
                         DateTime orderDate = DateTime.parse(ds['timestamp']);
                         String month =
-                            '${orderDate.month}-${orderDate.year}'; // Format as needed
+                            '${orderDate.day}-${orderDate.month}-${orderDate.year}'; // Format as needed
 
                         if (month != currentMonth) {
                           // Add heading for new month with a page break

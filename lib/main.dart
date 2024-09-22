@@ -28,7 +28,7 @@ void main() async {
         options: const FirebaseOptions(
             apiKey: "AIzaSyBKC3GD_3Bcdf7u7lrHVffyMaqVDJ-Mr-o",
             appId: "1:328696000707:web:6fbd18df36b31ca219f276",
-            messagingSenderId: "G-FKD3GQ32BS",
+            messagingSenderId: "328696000707",
             projectId: "dineease-f81e5"));
   }
 
@@ -74,9 +74,9 @@ class _MyHomePageState extends State<MyHomePage>
   bool obscurePassword = true;
   String settingsPin = "1215";
 
-  Future<void> getOrderId() async {
+  getOrderId() async {
     final SharedPreferences pref = await SharedPreferences.getInstance();
-    pref.clear();
+    // pref.clear();
 
     obtainedOrderId = pref.getString('userOrderId');
     obtainedOrderId1 = pref.getString('userOrderId1');
@@ -85,37 +85,37 @@ class _MyHomePageState extends State<MyHomePage>
     obtainedOrderId4 = pref.getString('userOrderId4');
     obtainedOrderId5 = pref.getString('userOrderId5');
 
-    if (obtainedOrderId != null) {
+    if (obtainedOrderId != null && obtainedOrderId != "null") {
       setState(() {
         finalOrderId = obtainedOrderId.toString();
         print("0:$finalOrderId");
       });
     }
-    if (obtainedOrderId1 != null) {
+    if (obtainedOrderId1 != null && obtainedOrderId1 != "null") {
       setState(() {
         finalOrderId1 = obtainedOrderId1.toString();
         print("1:$finalOrderId1");
       });
     }
-    if (obtainedOrderId2 != null) {
+    if (obtainedOrderId2 != null && obtainedOrderId2 != "null") {
       setState(() {
         finalOrderId2 = obtainedOrderId2.toString();
         print("2: $finalOrderId2");
       });
     }
-    if (obtainedOrderId3 != null) {
+    if (obtainedOrderId3 != null && obtainedOrderId3 != "null") {
       setState(() {
         finalOrderId3 = obtainedOrderId3.toString();
         print("3:$finalOrderId3");
       });
     }
-    if (obtainedOrderId4 != null) {
+    if (obtainedOrderId4 != null && obtainedOrderId4 != "null") {
       setState(() {
         finalOrderId4 = obtainedOrderId4.toString();
         print("4: $finalOrderId4");
       });
     }
-    if (obtainedOrderId5 != null) {
+    if (obtainedOrderId5 != null && obtainedOrderId5 != "null") {
       setState(() {
         finalOrderId5 = obtainedOrderId5.toString();
         print("5: $finalOrderId5");
@@ -159,31 +159,20 @@ class _MyHomePageState extends State<MyHomePage>
         //a floating button activated when order is made
         floatingActionButton: Builder(builder: (context) {
           return Builder(builder: (context) {
-            return GestureDetector(
-              onTap: () {
-                setState(() {
-                  finalOrderId;
-                  finalOrderId1;
-                  finalOrderId2;
-                  finalOrderId3;
-                  finalOrderId4;
-                });
-              },
-              child: SpeedDial(
-                controller: animationController,
-                openBackgroundColor: Colors.white,
-                child: Icon(Icons.shopping_cart),
-                closedForegroundColor: Colors.white,
-                openForegroundColor: Colors.black,
-                closedBackgroundColor: Colors.black,
-                speedDialChildren: [
-                  speedDialFoodList4(context, finalOrderId4.toString()),
-                  speedDialFoodList3(context, finalOrderId3.toString()),
-                  speedDialFoodList2(context, finalOrderId2.toString()),
-                  speedDialFoodList1(context, finalOrderId1.toString()),
-                  speedDialFoodList(context, finalOrderId.toString()),
-                ],
-              ),
+            return SpeedDial(
+              controller: animationController,
+              openBackgroundColor: Colors.white,
+              child: Icon(Icons.shopping_cart),
+              closedForegroundColor: Colors.white,
+              openForegroundColor: Colors.black,
+              closedBackgroundColor: Colors.black,
+              speedDialChildren: [
+                speedDialFoodList4(context, finalOrderId4.toString()),
+                speedDialFoodList3(context, finalOrderId3.toString()),
+                speedDialFoodList2(context, finalOrderId2.toString()),
+                speedDialFoodList1(context, finalOrderId1.toString()),
+                speedDialFoodList(context, finalOrderId.toString()),
+              ],
             );
           });
         }),
@@ -227,7 +216,7 @@ class _MyHomePageState extends State<MyHomePage>
                       style: TextStyle(fontSize: 18),
                     ),
                     TextSpan(
-                      text: "Works?",
+                      text: "Works",
                       style:
                           TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
                     )
@@ -696,7 +685,7 @@ class _MyHomePageState extends State<MyHomePage>
       children: [
         footerHeadTitle("Contact Us"),
         contactListItem(
-            Icon(Icons.phone), "+233-00-000-0000\n+233-00-000-0000"),
+            Icon(Icons.phone), "+233-24-952-2885\n+233-55-754 -1223"),
         contactListItem(Icon(Icons.email_outlined), "menucook@dineease.org"),
         contactListItem(Icon(Icons.location_on_outlined),
             "52/1, Hasan Holdings, New\nEskaton Road, Dhaka, Bangladesh"),
