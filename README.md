@@ -67,6 +67,8 @@ users/{uid} {
 
 ---
 
+---
+
 ## Firestore Schema
 
 **Orders**

@@ -93,13 +93,29 @@ class _OrdersPageState extends State<OrdersPage> {
                               style: Theme.of(context).textTheme.bodyLarge,
                             ),
                           )
-                        : ListView.separated(
-                            itemCount: filtered.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(height: 12),
-                            itemBuilder: (context, index) {
-                              final doc = filtered[index];
-                              return _OrderCard(doc: doc);
+                        : LayoutBuilder(
+                            builder: (context, constraints) {
+                              final width = constraints.maxWidth;
+                              final crossAxisCount = width > 1700
+                                  ? 4
+                                  : (width > 1350
+                                      ? 3
+                                      : (width > 1000 ? 2 : 1));
+                              return GridView.builder(
+                                gridDelegate:
+                                    SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: crossAxisCount,
+                                  childAspectRatio:
+                                      crossAxisCount >= 3 ? 1.35 : 1.6,
+                                  crossAxisSpacing: 14,
+                                  mainAxisSpacing: 14,
+                                ),
+                                itemCount: filtered.length,
+                                itemBuilder: (context, index) {
+                                  final doc = filtered[index];
+                                  return _OrderCard(doc: doc);
+                                },
+                              );
                             },
                           ),
                   ),
@@ -137,7 +153,7 @@ class _SummaryHeader extends StatelessWidget {
         ),
         _StatCard(
           title: 'Total Amount',
-          value: '\$${totalAmount.toStringAsFixed(2)}',
+          value: 'GHS ${totalAmount.toStringAsFixed(2)}',
           icon: Icons.payments,
         ),
         ConstrainedBox(
@@ -357,7 +373,7 @@ class _OrderCardState extends State<_OrderCard> {
                 _InfoRow(
                   icon: Icons.payments,
                   text:
-                      'Total: \$${(totals['total'] ?? 0).toString()}',
+                      'Total: GHS ${(totals['total'] ?? 0).toString()}',
                 ),
               ],
             ),
