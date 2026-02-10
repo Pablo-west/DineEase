@@ -79,7 +79,7 @@ class _UpdateOrderState extends State<UpdateOrder> {
                 const Text("Order placed"),
                 CupertinoSwitch(
                     dragStartBehavior: DragStartBehavior.start,
-                    activeColor: Colors.yellow,
+                    activeTrackColor: Colors.yellow,
                     value: orderMode,
                     onChanged: (bool s) {
                       setState(() {
@@ -95,7 +95,7 @@ class _UpdateOrderState extends State<UpdateOrder> {
                 const Text("Kitchen stage"),
                 CupertinoSwitch(
                     dragStartBehavior: DragStartBehavior.start,
-                    activeColor: Colors.red,
+                    activeTrackColor: Colors.red,
                     value: kitchenMode,
                     onChanged: (bool s) {
                       setState(() {
@@ -111,7 +111,7 @@ class _UpdateOrderState extends State<UpdateOrder> {
                 const Text("Delivered stage"),
                 CupertinoSwitch(
                     dragStartBehavior: DragStartBehavior.start,
-                    activeColor: Colors.brown,
+                    activeTrackColor: Colors.brown,
                     value: deliveredMode,
                     onChanged: (bool s) {
                       setState(() {
@@ -202,6 +202,9 @@ class _UpdateOrderState extends State<UpdateOrder> {
         textColor: Colors.white,
         fontSize: 15.0,
       );
+      if (!mounted) {
+        return;
+      }
       Navigator.of(context).pop();
     }).catchError((error) {
       Fluttertoast.showToast(

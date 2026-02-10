@@ -470,7 +470,7 @@ class _PlaceOdrerState extends State<PlaceOdrer> {
         padding: EdgeInsets.zero,
         child: DropdownButtonHideUnderline(
           child: DropdownButtonFormField<String>(
-            value: dropdownValue,
+            initialValue: dropdownValue,
             icon: const Icon(
               Icons.arrow_drop_down_rounded,
               color: Colors.black,

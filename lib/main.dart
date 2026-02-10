@@ -11,6 +11,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:simple_speed_dial/simple_speed_dial.dart';
 
+import 'admin/admin_app.dart';
 import 'global.dart';
 
 import 'menu list/menu_list.dart';
@@ -32,7 +33,7 @@ void main() async {
             projectId: "dineease-f81e5"));
   }
 
-  runApp(const MyApp());
+  runApp(kIsWeb ? const AdminApp() : const MyApp());
 }
 
 class MyApp extends StatelessWidget {
