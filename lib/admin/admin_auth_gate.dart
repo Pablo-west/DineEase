@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import 'admin_shell.dart';
+import 'loading_skeleton.dart';
 import 'login_page.dart';
 
 class AdminAuthGate extends StatelessWidget {
@@ -30,6 +31,11 @@ class AdminAuthGate extends StatelessWidget {
             if (roleSnap.connectionState == ConnectionState.waiting) {
               return const _LoadingScreen();
             }
+            if (roleSnap.hasError) {
+              return _BlockedScreen(
+                role: 'error: ${roleSnap.error}',
+              );
+            }
             final data = roleSnap.data?.data();
             final role = data?['role']?.toString().toLowerCase();
             final allowed = role == 'admin' || role == 'chef';
@@ -49,12 +55,25 @@ class _LoadingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(
-        child: SizedBox(
-          width: 44,
-          height: 44,
-          child: CircularProgressIndicator(),
+    return Scaffold(
+      body: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 860),
+            child: const Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SkeletonBox(width: 260, height: 32),
+                SizedBox(height: 16),
+                SkeletonBox(height: 18),
+                SizedBox(height: 12),
+                SkeletonBox(height: 18),
+                SizedBox(height: 20),
+                SkeletonBox(height: 220),
+              ],
+            ),
+          ),
         ),
       ),
     );

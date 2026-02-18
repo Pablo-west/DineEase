@@ -1,7 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:fluttertoast/fluttertoast.dart';
+
+import 'loading_skeleton.dart';
 
 class FoodsPage extends StatefulWidget {
   const FoodsPage({super.key, required this.searchQuery});
@@ -13,52 +14,85 @@ class FoodsPage extends StatefulWidget {
 }
 
 class _FoodsPageState extends State<FoodsPage> {
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _foodsStream;
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _categoriesStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _foodsStream = FirebaseFirestore.instance
+        .collection('foods')
+        .orderBy('title')
+        .snapshots();
+    _categoriesStream =
+        FirebaseFirestore.instance.collection('food_categories').snapshots();
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('foods')
-          .orderBy('title')
-          .snapshots(),
+      stream: _foodsStream,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+          return const _FoodsPageSkeleton();
+        }
+        if (snapshot.hasError) {
+          return FirestoreErrorPanel(
+            title: 'Foods cannot be loaded.',
+            error: snapshot.error,
+          );
         }
         final docs = snapshot.data?.docs ?? [];
         return ValueListenableBuilder<String>(
           valueListenable: widget.searchQuery,
           builder: (context, query, _) {
+            final normalizedQuery = query.trim().toLowerCase();
             final filtered = docs.where((doc) {
-              if (query.trim().isEmpty) {
+              if (normalizedQuery.isEmpty) {
                 return true;
               }
-              final lower = query.toLowerCase();
               final data = doc.data();
               final title = data['title']?.toString() ?? '';
               final category = data['category']?.toString() ?? '';
-              return ('$title $category').toLowerCase().contains(lower);
+              return ('$title $category')
+                  .toLowerCase()
+                  .contains(normalizedQuery);
             }).toList();
-
-            final width = MediaQuery.of(context).size.width;
-            final crossAxisCount = width > 1700
-                ? 5
-                : (width > 1400
-                    ? 4
-                    : (width > 1100 ? 3 : (width > 820 ? 2 : 1)));
 
             return Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
                 children: [
-                  Row(
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 10,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       Text(
                         'Foods',
                         style: Theme.of(context).textTheme.headlineSmall,
                       ),
-                      const SizedBox(width: 12),
-                      _CountPill(count: filtered.length),
-                      const Spacer(),
+                      _CountPill(count: filtered.length, label: 'foods'),
+                      StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                        stream: _categoriesStream,
+                        builder: (context, snapshot) {
+                          final docs = snapshot.data?.docs ?? [];
+                          final unique = <String>{};
+                          for (final doc in docs) {
+                            final data = doc.data();
+                            final name = (data['name'] ?? data['label'] ?? '')
+                                .toString()
+                                .trim();
+                            if (name.isNotEmpty) {
+                              unique.add(name.toLowerCase());
+                            }
+                          }
+                          return _CountPill(
+                            count: unique.length,
+                            label: 'categories',
+                          );
+                        },
+                      ),
                       FilledButton.icon(
                         onPressed: () async {
                           await showDialog(
@@ -68,6 +102,17 @@ class _FoodsPageState extends State<FoodsPage> {
                         },
                         icon: const Icon(Icons.add),
                         label: const Text('Add Food'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: () async {
+                          await showDialog(
+                            context: context,
+                            builder: (context) =>
+                                const _CategoryManagerDialog(),
+                          );
+                        },
+                        icon: const Icon(Icons.category_outlined),
+                        label: const Text('Add / Modify Categories'),
                       ),
                     ],
                   ),
@@ -83,10 +128,9 @@ class _FoodsPageState extends State<FoodsPage> {
                           )
                         : GridView.builder(
                             gridDelegate:
-                                SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: crossAxisCount,
-                              childAspectRatio:
-                                  crossAxisCount >= 4 ? 1.35 : 1.55,
+                                const SliverGridDelegateWithMaxCrossAxisExtent(
+                              maxCrossAxisExtent: 300,
+                              childAspectRatio: 0.85,
                               crossAxisSpacing: 14,
                               mainAxisSpacing: 14,
                             ),
@@ -107,6 +151,16 @@ class _FoodsPageState extends State<FoodsPage> {
   }
 }
 
+void _showSnack(BuildContext context, String message) {
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  if (messenger == null) {
+    return;
+  }
+  messenger
+    ..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(content: Text(message)));
+}
+
 class _FoodCard extends StatelessWidget {
   const _FoodCard({required this.doc});
 
@@ -124,121 +178,159 @@ class _FoodCard extends StatelessWidget {
     final time = data['time']?.toString() ?? '';
 
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                width: 120,
-                height: 120,
-                color: Colors.grey.shade100,
-                child: imageUrl.isEmpty
-                    ? const Icon(Icons.image_not_supported)
-                    : Image.network(
-                        imageUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) =>
-                            const Icon(Icons.broken_image),
-                      ),
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          title,
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      _CategoryChip(label: category),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 6,
-                    children: [
-                      _MetaChip(
-                        icon: Icons.star,
-                        label: rating == 0 ? 'Unrated' : rating.toStringAsFixed(1),
-                      ),
-                      if (calories.isNotEmpty)
-                        _MetaChip(
-                          icon: Icons.local_fire_department,
-                          label: '$calories kcal',
-                        ),
-                      if (time.isNotEmpty)
-                        _MetaChip(
-                          icon: Icons.schedule,
-                          label: time,
-                        ),
-                    ],
-                  ),
-                  const Spacer(),
-                  Text(
-                    'GHS $price',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                ],
-              ),
-            ),
-            Column(
-              children: [
-                IconButton(
-                  tooltip: 'Edit',
-                  icon: const Icon(Icons.edit),
-                  onPressed: () async {
-                    await showDialog(
-                      context: context,
-                      builder: (context) => FoodFormDialog(
-                        docId: doc.id,
-                        existing: data,
-                      ),
-                    );
-                  },
+      elevation: 0,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: Colors.black12),
+          color: Colors.white,
+        ),
+        child: SingleChildScrollView(
+          physics: const ClampingScrollPhysics(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ClipRRect(
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(18),
                 ),
-                IconButton(
-                  tooltip: 'Delete',
-                  icon: const Icon(Icons.delete_outline),
-                  onPressed: () async {
-                    final confirm = await showDialog<bool>(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        title: const Text('Delete food?'),
-                        content:
-                            const Text('This action cannot be undone.'),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context, false),
-                            child: const Text('Cancel'),
+                child: AspectRatio(
+                  aspectRatio: 16 / 10,
+                  child: Container(
+                    color: Colors.grey.shade100,
+                    child: imageUrl.isEmpty
+                        ? const Icon(Icons.image_not_supported)
+                        : Image.network(
+                            imageUrl,
+                            fit: BoxFit.cover,
+                            filterQuality: FilterQuality.low,
+                            errorBuilder: (_, __, ___) =>
+                                const Icon(Icons.broken_image),
                           ),
-                          FilledButton(
-                            onPressed: () => Navigator.pop(context, true),
-                            child: const Text('Delete'),
-                          ),
-                        ],
-                      ),
-                    );
-                    if (confirm == true) {
-                      await doc.reference.delete();
-                      Fluttertoast.showToast(
-                        msg: 'Food deleted',
-                        gravity: ToastGravity.BOTTOM,
-                      );
-                    }
-                  },
+                  ),
                 ),
-              ],
-            ),
-          ],
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        _CategoryChip(label: category),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: [
+                        _MetaChip(
+                          icon: Icons.star,
+                          label: rating == 0
+                              ? 'Unrated'
+                              : rating.toStringAsFixed(1),
+                        ),
+                        if (calories.isNotEmpty)
+                          _MetaChip(
+                            icon: Icons.local_fire_department,
+                            label: '$calories kcal',
+                          ),
+                        if (time.isNotEmpty)
+                          _MetaChip(
+                            icon: Icons.schedule,
+                            label: time,
+                          ),
+                        // _MetaChip(
+                        //   icon: Icons.delivery_dining,
+                        //   label: destinationDelivery.isEmpty
+                        //       ? 'Destination delivery'
+                        //       : destinationDelivery,
+                        // ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Text(
+                          'GHS $price',
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          tooltip: 'Edit',
+                          icon: const Icon(Icons.edit),
+                          onPressed: () async {
+                            await showDialog(
+                              context: context,
+                              builder: (context) => FoodFormDialog(
+                                docId: doc.id,
+                                existing: data,
+                              ),
+                            );
+                          },
+                        ),
+                        IconButton(
+                          tooltip: 'Delete',
+                          icon: const Icon(Icons.delete_outline,
+                              color: Colors.redAccent),
+                          onPressed: () async {
+                            final confirm = await showDialog<bool>(
+                              context: context,
+                              builder: (context) => AlertDialog(
+                                title: const Text('Delete food?'),
+                                content:
+                                    const Text('This action cannot be undone.'),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.pop(context, false),
+                                    child: const Text('Cancel'),
+                                  ),
+                                  FilledButton(
+                                    onPressed: () =>
+                                        Navigator.pop(context, true),
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: Colors.red,
+                                      foregroundColor: Colors.white,
+                                    ),
+                                    child: const Text('Delete'),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (confirm == true) {
+                              await doc.reference.delete();
+                              if (!context.mounted) {
+                                return;
+                              }
+                              _showSnack(context, 'Food deleted');
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -246,9 +338,10 @@ class _FoodCard extends StatelessWidget {
 }
 
 class _CountPill extends StatelessWidget {
-  const _CountPill({required this.count});
+  const _CountPill({required this.count, this.label = 'items'});
 
   final int count;
+  final String label;
 
   @override
   Widget build(BuildContext context) {
@@ -259,11 +352,50 @@ class _CountPill extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
-        '$count items',
+        '$count $label',
         style: Theme.of(context)
             .textTheme
             .labelMedium
             ?.copyWith(color: Theme.of(context).colorScheme.primary),
+      ),
+    );
+  }
+}
+
+class _FoodsPageSkeleton extends StatelessWidget {
+  const _FoodsPageSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        children: [
+          const Row(
+            children: [
+              SkeletonBox(width: 150, height: 28),
+              SizedBox(width: 12),
+              SkeletonBox(width: 90, height: 28),
+              SizedBox(width: 12),
+              SkeletonBox(width: 110, height: 28),
+            ],
+          ),
+          const SizedBox(height: 14),
+          const SkeletonBox(height: 48),
+          const SizedBox(height: 14),
+          Expanded(
+            child: GridView.builder(
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 300,
+                childAspectRatio: 1.12,
+                crossAxisSpacing: 14,
+                mainAxisSpacing: 14,
+              ),
+              itemCount: 8,
+              itemBuilder: (_, __) => const SkeletonBox(height: 280),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -357,6 +489,376 @@ class _MetaChip extends StatelessWidget {
   }
 }
 
+class _CategoryManagerDialog extends StatefulWidget {
+  const _CategoryManagerDialog();
+
+  @override
+  State<_CategoryManagerDialog> createState() => _CategoryManagerDialogState();
+}
+
+class _CategoryManagerDialogState extends State<_CategoryManagerDialog> {
+  final _newCategoryController = TextEditingController();
+  final _categoriesCollection =
+      FirebaseFirestore.instance.collection('food_categories');
+
+  @override
+  void dispose() {
+    _newCategoryController.dispose();
+    super.dispose();
+  }
+
+  String _categoryKey(String value) {
+    return value
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+        .replaceAll(RegExp(r'_+'), '_')
+        .replaceAll(RegExp(r'^_|_$'), '');
+  }
+
+  Future<void> _createCategory() async {
+    final label = _newCategoryController.text.trim();
+    if (label.isEmpty) {
+      return;
+    }
+    final key = _categoryKey(label);
+    if (key.isEmpty) {
+      return;
+    }
+    await _categoriesCollection.doc(key).set(
+      {
+        'name': label,
+        'updatedAt': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
+    _newCategoryController.clear();
+  }
+
+  Future<void> _renameCategory({
+    required String oldLabel,
+    required String categoryDocId,
+  }) async {
+    final controller = TextEditingController(text: oldLabel);
+    final renamed = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Rename Category'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(labelText: 'Category name'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (renamed == null || renamed.isEmpty) {
+      return;
+    }
+    final from = oldLabel.trim();
+    final to = renamed.trim();
+    if (from.toLowerCase() == to.toLowerCase()) {
+      return;
+    }
+
+    final newKey = _categoryKey(to);
+    await _categoriesCollection.doc(newKey).set(
+      {
+        'name': to,
+        'updatedAt': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
+    if (categoryDocId != newKey) {
+      await _categoriesCollection.doc(categoryDocId).delete();
+    }
+
+    final foodsSnapshot = await FirebaseFirestore.instance
+        .collection('foods')
+        .where('category', isEqualTo: from)
+        .get();
+    if (foodsSnapshot.docs.isNotEmpty) {
+      final batch = FirebaseFirestore.instance.batch();
+      for (final doc in foodsSnapshot.docs) {
+        batch.update(doc.reference, {'category': to});
+      }
+      await batch.commit();
+    }
+  }
+
+  Future<void> _confirmDeleteCategory({
+    required String categoryDocId,
+    required String label,
+  }) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete category?'),
+        content: Text(
+          'Delete "$label"? Foods using this category will be set to Uncategorized.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) {
+      return;
+    }
+
+    await _categoriesCollection.doc(categoryDocId).delete();
+    final foodsSnapshot = await FirebaseFirestore.instance
+        .collection('foods')
+        .where('category', isEqualTo: label)
+        .get();
+    if (foodsSnapshot.docs.isNotEmpty) {
+      final batch = FirebaseFirestore.instance.batch();
+      for (final doc in foodsSnapshot.docs) {
+        batch.update(doc.reference, {'category': ''});
+      }
+      await batch.commit();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 28),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 760, maxHeight: 720),
+        child: Padding(
+          padding: EdgeInsets.only(
+            left: 22,
+            right: 22,
+            top: 18,
+            bottom: MediaQuery.of(context).viewInsets.bottom + 18,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Manage Categories',
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Create, rename, or remove menu categories.',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Colors.black54,
+                    ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _newCategoryController,
+                      textInputAction: TextInputAction.done,
+                      decoration: InputDecoration(
+                        labelText: 'New category',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      onSubmitted: (_) => _createCategory(),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  FilledButton.icon(
+                    onPressed: _createCategory,
+                    icon: const Icon(Icons.add),
+                    label: const Text('Create'),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 14,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Expanded(
+                child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                  stream: _categoriesCollection.snapshots(),
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 20),
+                        child: Text(
+                          'Failed to load categories: ${snapshot.error}',
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodyMedium
+                              ?.copyWith(color: Colors.redAccent),
+                        ),
+                      );
+                    }
+                    if (snapshot.connectionState == ConnectionState.waiting &&
+                        !snapshot.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    final docs = snapshot.data?.docs ?? [];
+                    final categories = docs
+                        .map((doc) {
+                          final data = doc.data();
+                          final name = (data['name'] ?? data['label'] ?? '')
+                              .toString()
+                              .trim();
+                          if (name.isEmpty) {
+                            return null;
+                          }
+                          return _CategoryEntry(id: doc.id, name: name);
+                        })
+                        .whereType<_CategoryEntry>()
+                        .toList()
+                      ..sort((a, b) =>
+                          a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.03),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.black12),
+                          ),
+                          child: Row(
+                            children: [
+                              Text(
+                                'Existing Categories',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleSmall
+                                    ?.copyWith(fontWeight: FontWeight.w700),
+                              ),
+                              const Spacer(),
+                              Text(
+                                '${categories.length}',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleSmall
+                                    ?.copyWith(fontWeight: FontWeight.w700),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        if (docs.isEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 12),
+                            child: Text(
+                              'No categories yet. Add one to get started.',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                          )
+                        else
+                          Expanded(
+                            child: ListView.separated(
+                              itemCount: categories.length,
+                              separatorBuilder: (_, __) =>
+                                  const Divider(height: 1),
+                              itemBuilder: (context, index) {
+                                final category = categories[index];
+                                return ListTile(
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 4,
+                                  ),
+                                  title: Text(category.name),
+                                  subtitle: const Text(
+                                    'Edit to rename or delete this category',
+                                  ),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        onPressed: () => _renameCategory(
+                                          categoryDocId: category.id,
+                                          oldLabel: category.name,
+                                        ),
+                                        icon: const Icon(Icons.edit_outlined),
+                                      ),
+                                      IconButton(
+                                        onPressed: () => _confirmDeleteCategory(
+                                          categoryDocId: category.id,
+                                          label: category.name,
+                                        ),
+                                        icon: const Icon(
+                                          Icons.delete_outline,
+                                          color: Colors.redAccent,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Close'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CategoryEntry {
+  const _CategoryEntry({required this.id, required this.name});
+
+  final String id;
+  final String name;
+}
+
 class FoodFormDialog extends StatefulWidget {
   const FoodFormDialog({super.key, this.docId, this.existing});
 
@@ -368,6 +870,9 @@ class FoodFormDialog extends StatefulWidget {
 }
 
 class _FoodFormDialogState extends State<FoodFormDialog> {
+  static const String _popularFoodType = 'popularFood';
+  static const String _deliciousFoodType = 'deliciousFoods';
+
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _subtitleController = TextEditingController();
@@ -378,11 +883,8 @@ class _FoodFormDialogState extends State<FoodFormDialog> {
   final _caloriesController = TextEditingController();
   final _timeController = TextEditingController();
   Duration _duration = const Duration(minutes: 20);
-  final List<String> _categories = [
-    'Heavy Meal',
-    'Rice & Bean Meal',
-    'Side Dishes & Snacks',
-  ];
+  List<String> _categoryOptions = [];
+  bool _loadingCategories = true;
   final _ingredientsController = TextEditingController();
   final _imageUrlController = TextEditingController();
   final _foodType = <String>{};
@@ -405,8 +907,11 @@ class _FoodFormDialogState extends State<FoodFormDialog> {
           (data['ingredients'] as List?)?.join(', ') ?? '';
       _imageUrlController.text = data['imageUrl']?.toString() ?? '';
       final types = (data['foodType'] as List?)?.cast<String>() ?? [];
-      _foodType.addAll(types);
+      _foodType.addAll(
+        types.map(_normalizeFoodType).where((type) => type.isNotEmpty),
+      );
     }
+    _loadCategoryOptions();
   }
 
   @override
@@ -468,19 +973,54 @@ class _FoodFormDialogState extends State<FoodFormDialog> {
         } else {
           Navigator.pop(context);
         }
-        Fluttertoast.showToast(
-          msg: widget.docId == null ? 'Food created' : 'Food updated',
-          gravity: ToastGravity.BOTTOM,
-        );
+        _showSnack(
+            context, widget.docId == null ? 'Food created' : 'Food updated');
       }
     } catch (_) {
       if (mounted) {
         Navigator.pop(context);
-        Fluttertoast.showToast(
-          msg: 'Failed to save food',
-          gravity: ToastGravity.BOTTOM,
-        );
+        _showSnack(context, 'Failed to save food');
       }
+    }
+  }
+
+  Future<void> _loadCategoryOptions() async {
+    try {
+      final foodsSnapshot =
+          await FirebaseFirestore.instance.collection('foods').get();
+      final categorySnapshot =
+          await FirebaseFirestore.instance.collection('food_categories').get();
+      final normalized = <String, String>{};
+      for (final doc in foodsSnapshot.docs) {
+        final raw = doc.data()['category']?.toString() ?? '';
+        final cleaned = raw.trim();
+        if (cleaned.isEmpty) {
+          continue;
+        }
+        normalized.putIfAbsent(cleaned.toLowerCase(), () => cleaned);
+      }
+      for (final doc in categorySnapshot.docs) {
+        final raw = doc.data()['name']?.toString() ?? '';
+        final cleaned = raw.trim();
+        if (cleaned.isEmpty) {
+          continue;
+        }
+        normalized.putIfAbsent(cleaned.toLowerCase(), () => cleaned);
+      }
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _categoryOptions = normalized.values.toList()..sort();
+        _loadingCategories = false;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _loadingCategories = false;
+      });
     }
   }
 
@@ -548,32 +1088,71 @@ class _FoodFormDialogState extends State<FoodFormDialog> {
                                 Row(
                                   children: [
                                     Expanded(
-                                      child: DropdownButtonFormField<String>(
-                                        value: _categoryController.text.isEmpty
-                                            ? null
-                                            : _categoryController.text,
-                                        decoration: const InputDecoration(
-                                          labelText: 'Category',
-                                        ),
-                                        items: _categories
-                                            .map(
-                                              (cat) => DropdownMenuItem(
-                                                value: cat,
-                                                child: Text(cat),
-                                              ),
-                                            )
-                                            .toList(),
-                                        onChanged: (value) {
-                                          setState(() {
-                                            _categoryController.text =
-                                                value ?? '';
-                                          });
-                                        },
-                                        validator: (value) {
-                                          if (value == null || value.isEmpty) {
-                                            return 'Required';
+                                      child: Builder(
+                                        builder: (context) {
+                                          final normalized = <String, String>{};
+                                          for (final raw in _categoryOptions) {
+                                            final cleaned = raw.trim();
+                                            if (cleaned.isEmpty) {
+                                              continue;
+                                            }
+                                            normalized[cleaned.toLowerCase()] =
+                                                cleaned;
                                           }
-                                          return null;
+
+                                          final currentCategoryRaw =
+                                              _categoryController.text;
+                                          final currentCategory =
+                                              currentCategoryRaw.trim();
+                                          if (currentCategory.isNotEmpty) {
+                                            normalized[currentCategory
+                                                    .toLowerCase()] =
+                                                currentCategory;
+                                          }
+
+                                          final optionList = normalized.values
+                                              .toList()
+                                            ..sort();
+                                          final selected =
+                                              currentCategory.isEmpty
+                                                  ? null
+                                                  : normalized[currentCategory
+                                                      .toLowerCase()];
+
+                                          return DropdownButtonFormField<
+                                              String>(
+                                            key: ValueKey(
+                                              'category-$selected-${optionList.length}',
+                                            ),
+                                            initialValue: selected,
+                                            decoration: InputDecoration(
+                                              labelText: 'Category',
+                                              helperText: _loadingCategories
+                                                  ? 'Loading categories...'
+                                                  : null,
+                                            ),
+                                            items: optionList
+                                                .map(
+                                                  (cat) => DropdownMenuItem(
+                                                    value: cat,
+                                                    child: Text(cat),
+                                                  ),
+                                                )
+                                                .toList(),
+                                            onChanged: (value) {
+                                              setState(() {
+                                                _categoryController.text =
+                                                    value ?? '';
+                                              });
+                                            },
+                                            validator: (value) {
+                                              if (value == null ||
+                                                  value.isEmpty) {
+                                                return 'Required';
+                                              }
+                                              return null;
+                                            },
+                                          );
                                         },
                                       ),
                                     ),
@@ -604,7 +1183,7 @@ class _FoodFormDialogState extends State<FoodFormDialog> {
                                   decoration: const InputDecoration(
                                     labelText: 'Description',
                                   ),
-                                  maxLines: 3,
+                                  maxLines: 4,
                                   validator: _requiredField,
                                 ),
                                 const SizedBox(height: 12),
@@ -659,10 +1238,10 @@ class _FoodFormDialogState extends State<FoodFormDialog> {
                                 ),
                                 const SizedBox(height: 12),
                                 TextFormField(
+                                  maxLines: 3,
                                   controller: _ingredientsController,
                                   decoration: const InputDecoration(
-                                    labelText:
-                                        'Ingredients (comma separated)',
+                                    labelText: 'Ingredients (comma separated)',
                                   ),
                                 ),
                                 const SizedBox(height: 12),
@@ -675,29 +1254,45 @@ class _FoodFormDialogState extends State<FoodFormDialog> {
                                   onChanged: (_) => setState(() {}),
                                 ),
                                 const SizedBox(height: 12),
-                                Row(
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
                                   children: [
                                     FilterChip(
                                       label: const Text('Popular Food'),
                                       selected:
-                                          _foodType.contains('Popular Food'),
+                                          _foodType.contains(_popularFoodType),
+                                      showCheckmark: true,
+                                      checkmarkColor:
+                                          Theme.of(context).colorScheme.primary,
+                                      selectedColor: Theme.of(context)
+                                          .colorScheme
+                                          .primary
+                                          .withValues(alpha: 0.16),
                                       onSelected: (value) => setState(() {
                                         value
-                                            ? _foodType.add('Popular Food')
-                                            : _foodType.remove('Popular Food');
+                                            ? _foodType.add(_popularFoodType)
+                                            : _foodType
+                                                .remove(_popularFoodType);
                                       }),
                                     ),
-                                    const SizedBox(width: 8),
                                     FilterChip(
                                       label: const Text('Delicious Foods'),
                                       selected: _foodType
-                                          .contains('Delicious Foods'),
+                                          .contains(_deliciousFoodType),
+                                      showCheckmark: true,
+                                      checkmarkColor: Theme.of(context)
+                                          .colorScheme
+                                          .secondary,
+                                      selectedColor: Theme.of(context)
+                                          .colorScheme
+                                          .secondary
+                                          .withValues(alpha: 0.16),
                                       onSelected: (value) => setState(() {
                                         value
-                                            ? _foodType
-                                                .add('Delicious Foods')
+                                            ? _foodType.add(_deliciousFoodType)
                                             : _foodType
-                                                .remove('Delicious Foods');
+                                                .remove(_deliciousFoodType);
                                       }),
                                     ),
                                   ],
@@ -715,8 +1310,7 @@ class _FoodFormDialogState extends State<FoodFormDialog> {
                                     color: Colors.grey.shade100,
                                     borderRadius: BorderRadius.circular(12),
                                   ),
-                                  child:
-                                  _imageUrlController.text.trim().isEmpty
+                                  child: _imageUrlController.text.trim().isEmpty
                                       ? const Center(
                                           child: Text('Image preview'),
                                         )
@@ -724,16 +1318,16 @@ class _FoodFormDialogState extends State<FoodFormDialog> {
                                           borderRadius:
                                               BorderRadius.circular(12),
                                           child: Image.network(
-                                                _imageUrlController.text.trim(),
-                                                fit: BoxFit.cover,
-                                                errorBuilder: (_, __, ___) =>
-                                                    const Center(
-                                                  child: Text(
-                                                    'Invalid image URL',
-                                                  ),
-                                                ),
+                                            _imageUrlController.text.trim(),
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (_, __, ___) =>
+                                                const Center(
+                                              child: Text(
+                                                'Invalid image URL',
                                               ),
                                             ),
+                                          ),
+                                        ),
                                 ),
                                 const SizedBox(height: 16),
                                 FilledButton(
@@ -809,78 +1403,53 @@ class _FoodFormDialogState extends State<FoodFormDialog> {
   }
 
   Future<void> _pickDuration() async {
-    final selected = await showModalBottomSheet<int>(
+    final selected = await showDialog<int>(
       context: context,
-      showDragHandle: true,
       builder: (context) {
-        const options = [
-          5,
-          10,
-          15,
-          20,
-          25,
-          30,
-          35,
-          40,
-          45,
-          50,
-          55,
-          60,
-          75,
-          90,
-          105,
-          120
-        ];
         final current = _duration.inMinutes.clamp(5, 120);
         int tempValue = current;
         return StatefulBuilder(
           builder: (context, setSheetState) {
-            return Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Select prep time (minutes)',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<int>(
-                    value: tempValue,
-                    items: options
-                        .map(
-                          (m) => DropdownMenuItem(
-                            value: m,
-                            child: Text('$m min'),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) {
-                      if (value == null) {
-                        return;
-                      }
-                      setSheetState(() => tempValue = value);
-                    },
-                    decoration:
-                        const InputDecoration(labelText: 'Minutes'),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Cancel'),
-                      ),
-                      const Spacer(),
-                      FilledButton(
-                        onPressed: () => Navigator.pop(context, tempValue),
-                        child: const Text('Use time'),
-                      ),
-                    ],
-                  ),
-                ],
+            return AlertDialog(
+              title: const Text('Select prep time'),
+              content: SizedBox(
+                width: 360,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '$tempValue min',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 10),
+                    Slider(
+                      min: 5,
+                      max: 120,
+                      divisions: 115,
+                      label: '$tempValue min',
+                      value: tempValue.toDouble(),
+                      onChanged: (value) {
+                        setSheetState(() => tempValue = value.round());
+                      },
+                    ),
+                    Text(
+                      'Range: 5 to 120 minutes',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
               ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(context, tempValue),
+                  child: const Text('Use time'),
+                ),
+              ],
             );
           },
         );
@@ -896,7 +1465,7 @@ class _FoodFormDialogState extends State<FoodFormDialog> {
 
   String _formatDuration(Duration duration) {
     final totalMinutes = duration.inMinutes;
-    return '${totalMinutes} min';
+    return '$totalMinutes min';
   }
 
   Duration? _parseDuration(String input) {
@@ -916,6 +1485,18 @@ class _FoodFormDialogState extends State<FoodFormDialog> {
     final hours = int.tryParse(hoursMatch?.group(1) ?? '0') ?? 0;
     final minutes = int.tryParse(minutesMatch?.group(1) ?? '0') ?? 0;
     return Duration(hours: hours, minutes: minutes);
+  }
+
+  String _normalizeFoodType(String raw) {
+    final normalized =
+        raw.trim().toLowerCase().replaceAll(RegExp(r'[\s_-]+'), '');
+    if (normalized == 'popularfood') {
+      return _popularFoodType;
+    }
+    if (normalized == 'deliciousfoods' || normalized == 'deliciousfood') {
+      return _deliciousFoodType;
+    }
+    return raw.trim();
   }
 
   void _resetForm() {

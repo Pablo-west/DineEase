@@ -1,0 +1,157 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- Helpers ----------
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userDocPath(uid) {
+      return /databases/$(database)/documents/users/$(uid);
+    }
+
+    function hasUserDoc() {
+      return signedIn() && exists(userDocPath(request.auth.uid));
+    }
+
+    function roleIs(role) {
+      return hasUserDoc() && get(userDocPath(request.auth.uid)).data.role == role;
+    }
+
+    function isAdmin() { return roleIs('admin'); }
+    function isChef() { return roleIs('chef'); }
+    function isCashier() { return roleIs('cashier'); }
+    function isWaiter() { return roleIs('waiter'); }
+    function isRider() { return roleIs('delivery_rider'); }
+
+    function isKitchenStaff() { return isAdmin() || isChef(); }
+    function isOpsStaff() { return isAdmin() || isChef() || isCashier() || isWaiter() || isRider(); }
+
+    // ---------- Users ----------
+    match /users/{userId} {
+      // Own profile or admin/chef can read user docs
+      allow read: if signedIn() && (request.auth.uid == userId || isAdmin() || isChef());
+
+      // Self-create own profile doc, admin can create any user
+      allow create: if signedIn() && (
+        (request.auth.uid == userId
+          && request.resource.data.keys().hasOnly(['name', 'phone', 'email', 'role', 'createdAt', 'updatedAt'])
+          && request.resource.data.role is string)
+        || isAdmin()
+      );
+
+      // Self can update only safe profile fields (cannot change role)
+      // Admin can update any user fields needed by admin panel
+      allow update: if signedIn() && (
+        (request.auth.uid == userId
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.keys().hasOnly(['name', 'phone', 'email', 'role', 'createdAt', 'updatedAt']))
+        || isAdmin()
+      );
+
+      // Deleting user docs should be admin-only (or disabled if preferred)
+      allow delete: if isAdmin();
+
+      match /fcmTokens/{tokenId} {
+        allow read, write: if signedIn() && request.auth.uid == userId;
+      }
+    }
+
+    // ---------- Orders ----------
+    match /orders/{orderId} {
+      // Customer creates own order
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid;
+
+      // Customer reads own orders; ops staff reads all
+      allow read: if signedIn()
+        && (resource.data.userId == request.auth.uid || isOpsStaff());
+
+      // Ops staff updates orders (e.g., stage changes)
+      allow update: if signedIn() && isOpsStaff();
+
+      // Safer: only admin deletes orders
+      allow delete: if isAdmin();
+    }
+
+    // ---------- Menu ----------
+    match /foods/{foodId} {
+      allow read: if true;
+      allow create, update, delete: if signedIn() && isKitchenStaff();
+    }
+
+    match /food_categories/{categoryId} {
+      allow read: if true;
+      allow create, update, delete: if signedIn() && isKitchenStaff();
+    }
+
+    // ---------- Notices ----------
+    match /notices/{noticeId} {
+      // owner reads own notice; staff can create
+      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+      allow create: if signedIn() && isKitchenStaff();
+
+      // owner can update only non-sensitive fields and cannot reassign ownership
+      allow update: if signedIn()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == resource.data.userId;
+
+      allow delete: if isAdmin();
+    }
+
+    // ---------- Promotions / Pricing / Ads ----------
+    match /promotions/{id} {
+      allow read: if true;
+      allow create, update, delete: if signedIn() && isAdmin();
+    }
+
+    match /pricing_rules/{id} {
+      allow read: if true;
+      allow create, update, delete: if signedIn() && isAdmin();
+    }
+
+    match /announcements/{id} {
+      allow read: if true;
+      allow create, update, delete: if signedIn() && isAdmin();
+    }
+
+    // ---------- CRM ----------
+    match /customers/{customerId} {
+      allow read: if signedIn() && (isOpsStaff() || request.auth.uid == customerId);
+      allow create, update: if signedIn() && (isAdmin() || isCashier() || isWaiter());
+      allow delete: if isAdmin();
+
+      match /notes/{noteId} {
+        allow read: if signedIn() && (isOpsStaff() || request.auth.uid == customerId);
+        allow create: if signedIn() && (isAdmin() || isCashier() || isWaiter());
+        allow update: if signedIn() && (
+          isAdmin() ||
+          isCashier() ||
+          isWaiter() ||
+          request.auth.uid == customerId
+        );
+        allow delete: if isAdmin();
+      }
+    }
+
+    // ---------- Finance ----------
+    match /reconciliations/{recId} {
+      allow read: if signedIn() && (isAdmin() || isCashier());
+      allow create, update, delete: if signedIn() && isAdmin();
+    }
+
+    // ---------- Audit Logs ----------
+    match /audit_logs/{logId} {
+      allow read: if signedIn() && isAdmin();
+      // append-only for ops staff, immutable after write
+      allow create: if signedIn() && isOpsStaff();
+      allow update, delete: if false;
+    }
+
+    // ---------- Default deny ----------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

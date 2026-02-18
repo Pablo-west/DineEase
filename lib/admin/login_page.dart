@@ -1,6 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:fluttertoast/fluttertoast.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -34,15 +33,22 @@ class _LoginPageState extends State<LoginPage> {
         password: _passwordController.text,
       );
     } on FirebaseAuthException catch (e) {
-      Fluttertoast.showToast(
-        msg: e.message ?? 'Login failed',
-        gravity: ToastGravity.BOTTOM,
-      );
+      _showSnack(e.message ?? 'Login failed');
     } finally {
       if (mounted) {
         setState(() => _loading = false);
       }
     }
+  }
+
+  void _showSnack(String message) {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger == null) {
+      return;
+    }
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -60,24 +66,61 @@ class _LoginPageState extends State<LoginPage> {
         ),
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 440),
+            constraints: const BoxConstraints(maxWidth: 520),
             child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(28),
+              elevation: 0,
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: Colors.black12),
+                  color: Colors.white,
+                ),
+                padding: const EdgeInsets.all(32),
                 child: Form(
                   key: _formKey,
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text(
-                        'DineEase Admin',
-                        style: Theme.of(context).textTheme.headlineSmall,
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Sign in to manage orders and foods.',
-                        style: Theme.of(context).textTheme.bodyMedium,
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: scheme.primary.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Image.asset(
+                              'assets/logo/logo-icon.png',
+                              height: 32,
+                              width: 32,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'DineEase Admin',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleLarge
+                                      ?.copyWith(fontWeight: FontWeight.w700),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Welcome back. Sign in to continue.',
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 24),
                       TextFormField(
@@ -85,6 +128,7 @@ class _LoginPageState extends State<LoginPage> {
                         keyboardType: TextInputType.emailAddress,
                         decoration: const InputDecoration(
                           labelText: 'Email',
+                          prefixIcon: Icon(Icons.alternate_email),
                         ),
                         validator: (value) {
                           if (value == null || value.trim().isEmpty) {
@@ -102,10 +146,14 @@ class _LoginPageState extends State<LoginPage> {
                         obscureText: _obscure,
                         decoration: InputDecoration(
                           labelText: 'Password',
+                          prefixIcon: const Icon(Icons.lock_outline),
                           suffixIcon: IconButton(
-                            onPressed: () => setState(() => _obscure = !_obscure),
+                            onPressed: () =>
+                                setState(() => _obscure = !_obscure),
                             icon: Icon(
-                              _obscure ? Icons.visibility : Icons.visibility_off,
+                              _obscure
+                                  ? Icons.visibility
+                                  : Icons.visibility_off,
                             ),
                           ),
                         ),
@@ -122,11 +170,14 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                       const SizedBox(height: 22),
                       SizedBox(
-                        height: 48,
+                        height: 50,
                         child: FilledButton(
                           onPressed: _loading ? null : _submit,
                           style: FilledButton.styleFrom(
                             backgroundColor: scheme.primary,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
                           child: _loading
                               ? const SizedBox(
@@ -137,7 +188,7 @@ class _LoginPageState extends State<LoginPage> {
                                     color: Colors.white,
                                   ),
                                 )
-                              : const Text('Login'),
+                              : const Text('Sign In'),
                         ),
                       ),
                     ],

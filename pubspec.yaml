@@ -67,6 +67,11 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+  assets:
+    - assets/logo/
+    - assets/banners/
+    - assets/food/
+    - assets/special/
 
 flutter_launcher_icons:
   image_path: "assets/logo/logo-icon.png"
@@ -77,13 +82,6 @@ flutter_launcher_icons:
     image_path: "assets/logo/logo-icon.png"
     background_color: "#F7F4EF"
     theme_color: "#1F3A5F"
-
-  # To add assets to your application, add an assets section, like this:
-  assets:
-    - assets/logo/
-    - assets/banners/
-    - assets/food/
-    - assets/special/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/assets-and-images/#resolution-aware

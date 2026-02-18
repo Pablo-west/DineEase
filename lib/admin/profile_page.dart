@@ -1,7 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:fluttertoast/fluttertoast.dart';
+
+import 'loading_skeleton.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -15,6 +16,7 @@ class _ProfilePageState extends State<ProfilePage> {
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   bool _loaded = false;
+  bool _saving = false;
 
   @override
   void dispose() {
@@ -27,11 +29,10 @@ class _ProfilePageState extends State<ProfilePage> {
     if (!_formKey.currentState!.validate()) {
       return;
     }
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const Center(child: CircularProgressIndicator()),
-    );
+    if (_saving) {
+      return;
+    }
+    setState(() => _saving = true);
     try {
       await FirebaseFirestore.instance.collection('users').doc(uid).set({
         'name': _nameController.text.trim(),
@@ -43,21 +44,35 @@ class _ProfilePageState extends State<ProfilePage> {
       if (!mounted) {
         return;
       }
-      Navigator.pop(context);
-      Fluttertoast.showToast(
-        msg: 'Profile updated',
-        gravity: ToastGravity.BOTTOM,
-      );
+      _showSnack('Profile updated');
     } catch (_) {
       if (!mounted) {
         return;
       }
-      Navigator.pop(context);
-      Fluttertoast.showToast(
-        msg: 'Failed to update profile',
-        gravity: ToastGravity.BOTTOM,
-      );
+      _showSnack('Failed to update profile');
+    } finally {
+      if (mounted) {
+        setState(() => _saving = false);
+      }
     }
+  }
+
+  void _showSnack(String message) {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger == null) {
+      return;
+    }
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  String _initial(String name, String email) {
+    final seed = name.trim().isNotEmpty ? name.trim() : email.trim();
+    if (seed.isEmpty) {
+      return 'A';
+    }
+    return seed[0].toUpperCase();
   }
 
   @override
@@ -74,7 +89,13 @@ class _ProfilePageState extends State<ProfilePage> {
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+          return const _ProfilePageSkeleton();
+        }
+        if (snapshot.hasError) {
+          return FirestoreErrorPanel(
+            title: 'Profile cannot be loaded.',
+            error: snapshot.error,
+          );
         }
         final data = snapshot.data?.data() ?? {};
         final role = data['role']?.toString() ?? 'unknown';
@@ -87,96 +108,373 @@ class _ProfilePageState extends State<ProfilePage> {
           _loaded = true;
         }
 
-        return Padding(
+        final scheme = Theme.of(context).colorScheme;
+        final email = user.email ?? 'No email';
+
+        return SingleChildScrollView(
           padding: const EdgeInsets.all(24),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 720),
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Profile',
-                        style: Theme.of(context).textTheme.headlineSmall,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 980),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(22),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          scheme.primary,
+                          scheme.primary.withValues(alpha: 0.82),
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
                       ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          CircleAvatar(
-                            radius: 28,
-                            backgroundColor:
-                                Theme.of(context).colorScheme.primary,
-                            child: Text(
-                              (name.isEmpty ? 'A' : name[0]).toUpperCase(),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                              ),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Wrap(
+                      spacing: 16,
+                      runSpacing: 16,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        CircleAvatar(
+                          radius: 34,
+                          backgroundColor: Colors.white.withValues(alpha: 0.2),
+                          child: Text(
+                            _initial(name, email),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 24,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
-                          const SizedBox(width: 16),
-                          Column(
+                        ),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 520),
+                          child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                user.email ?? 'No email',
-                                style: Theme.of(context).textTheme.titleMedium,
+                                name.isEmpty ? 'Admin User' : name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .headlineSmall
+                                    ?.copyWith(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w700,
+                                    ),
                               ),
                               const SizedBox(height: 4),
-                              Text('Role: $role'),
+                              Text(
+                                email,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.copyWith(color: Colors.white70),
+                              ),
                             ],
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                      TextFormField(
-                        controller: _nameController,
-                        decoration: const InputDecoration(
-                          labelText: 'Full name',
                         ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Name is required';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: _phoneController,
-                        decoration: const InputDecoration(
-                          labelText: 'Phone',
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.16),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.22),
+                            ),
+                          ),
+                          child: Text(
+                            role.toUpperCase(),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
                         ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Phone is required';
-                          }
-                          return null;
-                        },
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      _ProfileMetaCard(
+                        icon: Icons.badge_outlined,
+                        label: 'Role',
+                        value: role.toUpperCase(),
                       ),
-                      const SizedBox(height: 18),
-                      FilledButton(
-                        onPressed: () => _save(
-                          user.uid,
-                          role,
-                          user.email ?? '',
-                        ),
-                        child: const Text('Update Profile'),
+                      _ProfileMetaCard(
+                        icon: Icons.markunread_outlined,
+                        label: 'Email',
+                        value: email,
                       ),
+                      // _ProfileMetaCard(
+                      //   icon: Icons.fingerprint,
+                      //   label: 'User ID',
+                      //   value: _shortUid(user.uid),
+                      // ),
                     ],
                   ),
-                ),
+                  const SizedBox(height: 16),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Form(
+                        key: _formKey,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Edit Profile',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleLarge
+                                  ?.copyWith(fontWeight: FontWeight.w700),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Keep your details current for order and account communication.',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                            const SizedBox(height: 16),
+                            LayoutBuilder(
+                              builder: (context, constraints) {
+                                final twoCols = constraints.maxWidth > 720;
+                                if (!twoCols) {
+                                  return Column(
+                                    children: [
+                                      TextFormField(
+                                        controller: _nameController,
+                                        decoration: const InputDecoration(
+                                          labelText: 'Full name',
+                                          prefixIcon:
+                                              Icon(Icons.person_outline),
+                                        ),
+                                        validator: (value) {
+                                          if (value == null ||
+                                              value.trim().isEmpty) {
+                                            return 'Name is required';
+                                          }
+                                          return null;
+                                        },
+                                      ),
+                                      const SizedBox(height: 12),
+                                      TextFormField(
+                                        controller: _phoneController,
+                                        decoration: const InputDecoration(
+                                          labelText: 'Phone',
+                                          prefixIcon:
+                                              Icon(Icons.phone_outlined),
+                                        ),
+                                        validator: (value) {
+                                          if (value == null ||
+                                              value.trim().isEmpty) {
+                                            return 'Phone is required';
+                                          }
+                                          return null;
+                                        },
+                                      ),
+                                    ],
+                                  );
+                                }
+                                return Row(
+                                  children: [
+                                    Expanded(
+                                      child: TextFormField(
+                                        controller: _nameController,
+                                        decoration: const InputDecoration(
+                                          labelText: 'Full name',
+                                          prefixIcon:
+                                              Icon(Icons.person_outline),
+                                        ),
+                                        validator: (value) {
+                                          if (value == null ||
+                                              value.trim().isEmpty) {
+                                            return 'Name is required';
+                                          }
+                                          return null;
+                                        },
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: TextFormField(
+                                        controller: _phoneController,
+                                        decoration: const InputDecoration(
+                                          labelText: 'Phone',
+                                          prefixIcon:
+                                              Icon(Icons.phone_outlined),
+                                        ),
+                                        validator: (value) {
+                                          if (value == null ||
+                                              value.trim().isEmpty) {
+                                            return 'Phone is required';
+                                          }
+                                          return null;
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            Row(
+                              children: [
+                                FilledButton.icon(
+                                  onPressed: _saving
+                                      ? null
+                                      : () => _save(
+                                    user.uid,
+                                    role,
+                                    email,
+                                  ),
+                                  icon: _saving
+                                      ? const SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.white,
+                                          ),
+                                        )
+                                      : const Icon(Icons.save_outlined),
+                                  label: Text(
+                                    _saving ? 'Saving...' : 'Save Changes',
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                OutlinedButton(
+                                  onPressed: _saving
+                                      ? null
+                                      : () {
+                                    _nameController.text = name;
+                                    _phoneController.text = phone;
+                                    setState(() {});
+                                  },
+                                  child: const Text('Reset'),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
         );
       },
+    );
+  }
+}
+
+class _ProfileMetaCard extends StatelessWidget {
+  const _ProfileMetaCard({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: 220,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.black12),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: scheme.primary.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: scheme.primary, size: 18),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: Theme.of(context)
+                      .textTheme
+                      .labelSmall
+                      ?.copyWith(color: Colors.black54),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context)
+                      .textTheme
+                      .labelLarge
+                      ?.copyWith(fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfilePageSkeleton extends StatelessWidget {
+  const _ProfilePageSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 980),
+          child: const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SkeletonBox(height: 132),
+              SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(child: SkeletonBox(height: 72)),
+                  SizedBox(width: 12),
+                  Expanded(child: SkeletonBox(height: 72)),
+                  SizedBox(width: 12),
+                  Expanded(child: SkeletonBox(height: 72)),
+                ],
+              ),
+              SizedBox(height: 16),
+              SkeletonBox(height: 270),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

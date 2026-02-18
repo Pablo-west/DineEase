@@ -1,7 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:fluttertoast/fluttertoast.dart';
+
+import 'loading_skeleton.dart';
 
 class OrdersPage extends StatefulWidget {
   const OrdersPage({super.key, required this.searchQuery});
@@ -15,6 +16,7 @@ class OrdersPage extends StatefulWidget {
 class _OrdersPageState extends State<OrdersPage> {
   static const stages = ['placed', 'preparing', 'inKitchen', 'delivered'];
   String _stageFilter = 'all';
+  DateTimeRange? _dateRange;
 
   @override
   Widget build(BuildContext context) {
@@ -25,22 +27,44 @@ class _OrdersPageState extends State<OrdersPage> {
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+          return const _OrdersPageSkeleton();
+        }
+        if (snapshot.hasError) {
+          return FirestoreErrorPanel(
+            title: 'Orders cannot be loaded.',
+            error: snapshot.error,
+          );
         }
         final docs = snapshot.data?.docs ?? [];
         return ValueListenableBuilder<String>(
           valueListenable: widget.searchQuery,
           builder: (context, query, _) {
-            final filtered = docs.where((doc) {
+            final normalizedQuery = query.trim().toLowerCase();
+            final baseFiltered = docs.where((doc) {
               final data = doc.data();
-              final stage = data['stage']?.toString() ?? '';
-              if (_stageFilter != 'all' && stage != _stageFilter) {
-                return false;
+              if (_dateRange != null) {
+                final orderDate = _resolveOrderDate(data);
+                if (orderDate == null) {
+                  return false;
+                }
+                final start = DateTime(
+                  _dateRange!.start.year,
+                  _dateRange!.start.month,
+                  _dateRange!.start.day,
+                );
+                final endExclusive = DateTime(
+                  _dateRange!.end.year,
+                  _dateRange!.end.month,
+                  _dateRange!.end.day + 1,
+                );
+                if (orderDate.isBefore(start) ||
+                    !orderDate.isBefore(endExclusive)) {
+                  return false;
+                }
               }
-              if (query.trim().isEmpty) {
+              if (normalizedQuery.isEmpty) {
                 return true;
               }
-              final lower = query.toLowerCase();
               final orderNumber = data['orderNumber']?.toString() ?? '';
               final user = (data['user'] as Map?) ?? {};
               final payment = (data['payment'] as Map?) ?? {};
@@ -50,7 +74,15 @@ class _OrdersPageState extends State<OrdersPage> {
                 user['phone']?.toString() ?? '',
                 payment['method']?.toString() ?? '',
               ].join(' ').toLowerCase();
-              return searchPool.contains(lower);
+              return searchPool.contains(normalizedQuery);
+            }).toList();
+
+            final filtered = baseFiltered.where((doc) {
+              if (_stageFilter == 'all') {
+                return true;
+              }
+              final stage = doc.data()['stage']?.toString() ?? '';
+              return stage == _stageFilter;
             }).toList();
 
             final totalAmount = filtered.fold<double>(0.0, (acc, doc) {
@@ -63,68 +95,215 @@ class _OrdersPageState extends State<OrdersPage> {
             });
 
             final stageCounts = <String, int>{for (var s in stages) s: 0};
-            for (final doc in filtered) {
+            for (final doc in baseFiltered) {
               final stage = doc.data()['stage']?.toString();
               if (stage != null && stageCounts.containsKey(stage)) {
                 stageCounts[stage] = stageCounts[stage]! + 1;
               }
             }
 
-            return Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  _SummaryHeader(
-                    totalOrders: filtered.length,
-                    totalAmount: totalAmount,
-                    stageCounts: stageCounts,
-                  ),
-                  const SizedBox(height: 16),
-                  _StageFilter(
-                    current: _stageFilter,
-                    onSelect: (value) => setState(() => _stageFilter = value),
-                  ),
-                  const SizedBox(height: 12),
-                  Expanded(
-                    child: filtered.isEmpty
-                        ? Center(
-                            child: Text(
-                              'No orders match your filters.',
-                              style: Theme.of(context).textTheme.bodyLarge,
-                            ),
-                          )
-                        : LayoutBuilder(
-                            builder: (context, constraints) {
-                              final width = constraints.maxWidth;
-                              final crossAxisCount = width > 1700
-                                  ? 4
-                                  : (width > 1350
-                                      ? 3
-                                      : (width > 1000 ? 2 : 1));
-                              return GridView.builder(
-                                gridDelegate:
-                                    SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: crossAxisCount,
-                                  childAspectRatio:
-                                      crossAxisCount >= 3 ? 1.35 : 1.6,
-                                  crossAxisSpacing: 14,
-                                  mainAxisSpacing: 14,
-                                ),
-                                itemCount: filtered.length,
-                                itemBuilder: (context, index) {
-                                  final doc = filtered[index];
-                                  return _OrderCard(doc: doc);
-                                },
-                              );
-                            },
+            // final hasActiveFilters = _stageFilter != 'all' ||
+            //     _dateRange != null ||
+            //     query.trim().isNotEmpty;
+
+            return Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Theme.of(context).colorScheme.surface,
+                    Theme.of(context)
+                        .colorScheme
+                        .surface
+                        .withValues(alpha: 0.85),
+                  ],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+                child: Column(
+                  children: [
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final isWide = constraints.maxWidth >= 1280;
+                        final dateRangeCard = Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.black12),
                           ),
-                  ),
-                ],
+                          child: _DateRangeFilter(
+                            selected: _dateRange,
+                            onPick: () async {
+                              final picked = await showDateRangePicker(
+                                context: context,
+                                firstDate: DateTime(2020),
+                                lastDate: DateTime.now().add(
+                                  const Duration(days: 365),
+                                ),
+                                initialDateRange: _dateRange,
+                                helpText: 'Filter orders by date range',
+                              );
+                              if (picked == null || !mounted) {
+                                return;
+                              }
+                              setState(() => _dateRange = picked);
+                            },
+                            onClear: () => setState(() => _dateRange = null),
+                          ),
+                        );
+
+                        final summaryHeader = _SummaryHeader(
+                          totalOrders: filtered.length,
+                          totalAmount: totalAmount,
+                          allCount: baseFiltered.length,
+                          stageCounts: stageCounts,
+                          currentStage: _stageFilter,
+                          onStageSelect: (stage) =>
+                              setState(() => _stageFilter = stage),
+                        );
+
+                        if (isWide) {
+                          return Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(child: summaryHeader),
+                              const SizedBox(width: 12),
+                              ConstrainedBox(
+                                constraints:
+                                    const BoxConstraints(maxWidth: 380),
+                                child: dateRangeCard,
+                              ),
+                            ],
+                          );
+                        }
+
+                        return Column(
+                          children: [
+                            summaryHeader,
+                            const SizedBox(height: 8),
+                            dateRangeCard,
+                          ],
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: filtered.isEmpty
+                          ? Center(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 22,
+                                  vertical: 16,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: Colors.black12),
+                                ),
+                                child: Text(
+                                  'No orders match your filters.',
+                                  style: Theme.of(context).textTheme.bodyLarge,
+                                ),
+                              ),
+                            )
+                          : GridView.builder(
+                              gridDelegate:
+                                  const SliverGridDelegateWithMaxCrossAxisExtent(
+                                maxCrossAxisExtent: 360,
+                                childAspectRatio: 1.0,
+                                crossAxisSpacing: 14,
+                                mainAxisSpacing: 14,
+                              ),
+                              itemCount: filtered.length,
+                              itemBuilder: (context, index) {
+                                final doc = filtered[index];
+                                return _OrderCard(doc: doc);
+                              },
+                            ),
+                    ),
+                  ],
+                ),
               ),
             );
           },
         );
       },
+    );
+  }
+
+  DateTime? _resolveOrderDate(Map<String, dynamic> data) {
+    final placedAt = data['placedAt'];
+    if (placedAt is Timestamp) {
+      return placedAt.toDate();
+    }
+    if (placedAt is DateTime) {
+      return placedAt;
+    }
+    if (placedAt is String) {
+      final parsed = DateTime.tryParse(placedAt);
+      if (parsed != null) {
+        return parsed;
+      }
+    }
+    final timestamp = data['timestamp'];
+    if (timestamp is Timestamp) {
+      return timestamp.toDate();
+    }
+    if (timestamp is String) {
+      return DateTime.tryParse(timestamp);
+    }
+    return null;
+  }
+}
+
+void _showSnack(BuildContext context, String message) {
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  if (messenger == null) {
+    return;
+  }
+  messenger
+    ..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(content: Text(message)));
+}
+
+class _OrdersPageSkeleton extends StatelessWidget {
+  const _OrdersPageSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+      child: Column(
+        children: [
+          const Row(
+            children: [
+              Expanded(child: SkeletonBox(height: 92)),
+              SizedBox(width: 12),
+              Expanded(child: SkeletonBox(height: 92)),
+              SizedBox(width: 12),
+              Expanded(child: SkeletonBox(height: 92)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          const SkeletonBox(height: 56),
+          const SizedBox(height: 10),
+          Expanded(
+            child: GridView.builder(
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 360,
+                childAspectRatio: 1.2,
+                crossAxisSpacing: 14,
+                mainAxisSpacing: 14,
+              ),
+              itemCount: 8,
+              itemBuilder: (_, __) => const SkeletonBox(height: 260),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -133,15 +312,22 @@ class _SummaryHeader extends StatelessWidget {
   const _SummaryHeader({
     required this.totalOrders,
     required this.totalAmount,
+    required this.allCount,
     required this.stageCounts,
+    required this.currentStage,
+    required this.onStageSelect,
   });
 
   final int totalOrders;
   final double totalAmount;
+  final int allCount;
   final Map<String, int> stageCounts;
+  final String currentStage;
+  final ValueChanged<String> onStageSelect;
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Wrap(
       spacing: 12,
       runSpacing: 12,
@@ -159,22 +345,55 @@ class _SummaryHeader extends StatelessWidget {
         ConstrainedBox(
           constraints: const BoxConstraints(minWidth: 260, maxWidth: 520),
           child: Card(
+            elevation: 0,
+            color: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: const BorderSide(color: Colors.black12),
+            ),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Wrap(
-                spacing: 12,
-                runSpacing: 8,
-                children: stageCounts.entries.map((entry) {
-                  return Chip(
-                    label: Text('${entry.key}: ${entry.value}'),
-                    backgroundColor:
-                        _stageColor(entry.key).withValues(alpha: 0.15),
-                    labelStyle: TextStyle(
-                      color: _stageColor(entry.key),
-                      fontWeight: FontWeight.w600,
-                    ),
-                  );
-                }).toList(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Stage Breakdown',
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          color: scheme.primary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 8,
+                    children: [
+                      ChoiceChip(
+                        label: Text('all: $allCount'),
+                        selected: currentStage == 'all',
+                        selectedColor:
+                            Theme.of(context).colorScheme.primary.withValues(
+                                  alpha: 0.2,
+                                ),
+                        onSelected: (_) => onStageSelect('all'),
+                      ),
+                      ...stageCounts.entries.map((entry) {
+                        final active = currentStage == entry.key;
+                        return ChoiceChip(
+                          label: Text('${entry.key}: ${entry.value}'),
+                          selected: active,
+                          selectedColor:
+                              _stageColor(entry.key).withValues(alpha: 0.25),
+                          labelStyle: TextStyle(
+                            color: _stageColor(entry.key),
+                            fontWeight: FontWeight.w600,
+                          ),
+                          onSelected: (_) => onStageSelect(entry.key),
+                        );
+                      }),
+                    ],
+                  ),
+                ],
               ),
             ),
           ),
@@ -197,15 +416,29 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return SizedBox(
       width: 180,
       child: Card(
+        elevation: 0,
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: Colors.black12),
+        ),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icon, size: 20),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: scheme.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, size: 18, color: scheme.primary),
+              ),
               const SizedBox(height: 10),
               Text(
                 title,
@@ -227,32 +460,59 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-class _StageFilter extends StatelessWidget {
-  const _StageFilter({
-    required this.current,
-    required this.onSelect,
+class _DateRangeFilter extends StatelessWidget {
+  const _DateRangeFilter({
+    required this.selected,
+    required this.onPick,
+    required this.onClear,
   });
 
-  final String current;
-  final ValueChanged<String> onSelect;
+  final DateTimeRange? selected;
+  final VoidCallback onPick;
+  final VoidCallback onClear;
 
   @override
   Widget build(BuildContext context) {
-    const filters = ['all', 'placed', 'preparing', 'inKitchen', 'delivered'];
-    return Row(
-      children: filters.map((stage) {
-        final active = stage == current;
-        return Padding(
-          padding: const EdgeInsets.only(right: 8),
-          child: ChoiceChip(
-            label: Text(stage),
-            selected: active,
-            selectedColor: _stageColor(stage).withValues(alpha: 0.18),
-            onSelected: (_) => onSelect(stage),
+    final scheme = Theme.of(context).colorScheme;
+    final hasRange = selected != null;
+    final label = hasRange
+        ? '${_fmt(selected!.start)} - ${_fmt(selected!.end)}'
+        : 'All dates';
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 6,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Text(
+          'Date Range',
+          style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: scheme.primary,
+                fontWeight: FontWeight.w700,
+              ),
+        ),
+        OutlinedButton.icon(
+          onPressed: onPick,
+          icon: const Icon(Icons.date_range),
+          label: const Text('Pick Date Range'),
+        ),
+        Chip(
+          avatar: const Icon(Icons.calendar_today, size: 16),
+          label: Text(label),
+        ),
+        if (hasRange)
+          TextButton(
+            onPressed: onClear,
+            child: const Text('Clear'),
           ),
-        );
-      }).toList(),
+      ],
     );
+  }
+
+  String _fmt(DateTime date) {
+    final month = date.month.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
+    return '${date.year}-$month-$day';
   }
 }
 
@@ -268,159 +528,304 @@ class _OrderCard extends StatefulWidget {
 class _OrderCardState extends State<_OrderCard> {
   bool _updating = false;
 
+  Future<void> _updateOrderAndCreateNotice({
+    required String newStage,
+    required Map<String, dynamic> data,
+    required List items,
+    required String orderNumber,
+  }) async {
+    await widget.doc.reference.update({'stage': newStage});
+
+    final userMap = (data['user'] as Map?) ?? const {};
+    final userId =
+        (data['userId'] ?? userMap['id'] ?? userMap['uid'] ?? '').toString();
+    if (userId.isEmpty) return;
+
+    final foodNames = items
+        .whereType<Map>()
+        .map((item) => (item['title'] ?? '').toString())
+        .where((title) => title.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+
+    final resolvedOrderNumber =
+        orderNumber.isEmpty ? widget.doc.id : orderNumber;
+    final message =
+        'Order #$resolvedOrderNumber is now ${_stageLabel(newStage)}.';
+
+    await FirebaseFirestore.instance.collection('notices').add({
+      'userId': userId,
+      'title': 'Order Status Updated',
+      'message': message,
+      'orderId': widget.doc.id,
+      'orderNumber': resolvedOrderNumber,
+      'foodNames': foodNames,
+      'stage': newStage,
+      'read': false,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  String _stageLabel(String stage) {
+    switch (stage) {
+      case 'preparing':
+        return 'Preparing';
+      case 'inKitchen':
+        return 'In Kitchen';
+      case 'delivered':
+        return 'Delivered';
+      case 'placed':
+      default:
+        return 'Placed';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final data = widget.doc.data();
     final user = (data['user'] as Map?) ?? {};
     final payment = (data['payment'] as Map?) ?? {};
+    final delivery = (data['delivery'] as Map?) ?? {};
     final totals = (data['totals'] as Map?) ?? {};
     final items = (data['items'] as List?) ?? [];
     final stage = data['stage']?.toString() ?? 'placed';
     final orderNumber = data['orderNumber']?.toString() ?? widget.doc.id;
+    final deliveryType = delivery['type']?.toString() ?? '';
+    final tableNumber = delivery['tableNumber']?.toString() ?? '';
+    final address = delivery['address']?.toString() ?? '';
+    final deliveryDestination = deliveryType == 'table'
+        ? 'Table ${tableNumber.isEmpty ? '-' : tableNumber}'
+        : (address.isEmpty ? 'Doorstep' : address);
+
+    final itemPreview = items.take(2).toList();
+    final remaining = items.length - itemPreview.length;
 
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text(
-                  'Order #$orderNumber',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(width: 10),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: _stageColor(stage).withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(20),
+      elevation: 0,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: Colors.black12),
+          color: Colors.white,
+        ),
+        padding: const EdgeInsets.all(16),
+        child: SingleChildScrollView(
+          physics: const ClampingScrollPhysics(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                spacing: 10,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    'Order #$orderNumber',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700),
                   ),
-                  child: Text(
-                    stage,
-                    style: TextStyle(
-                      color: _stageColor(stage),
-                      fontWeight: FontWeight.w600,
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: _stageColor(stage).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(20),
                     ),
-                  ),
-                ),
-                const Spacer(),
-                SizedBox(
-                  width: 160,
-                  child: InputDecorator(
-                    decoration: const InputDecoration(
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: stage,
-                        isDense: true,
-                        items: _OrderPageStages.stages
-                            .map(
-                              (s) => DropdownMenuItem(
-                                value: s,
-                                child: Text(s),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: _updating
-                            ? null
-                            : (value) async {
-                                if (value == null || value == stage) {
-                                  return;
-                                }
-                                setState(() => _updating = true);
-                                try {
-                                  await widget.doc.reference
-                                      .update({'stage': value});
-                                  Fluttertoast.showToast(
-                                    msg: 'Order updated to $value',
-                                    gravity: ToastGravity.BOTTOM,
-                                  );
-                                } catch (_) {
-                                  Fluttertoast.showToast(
-                                    msg: 'Failed to update order',
-                                    gravity: ToastGravity.BOTTOM,
-                                  );
-                                } finally {
-                                  if (mounted) {
-                                    setState(() => _updating = false);
-                                  }
-                                }
-                              },
+                    child: Text(
+                      stage,
+                      style: TextStyle(
+                        color: _stageColor(stage),
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 16,
-              runSpacing: 8,
-              children: [
-                _InfoRow(
-                  icon: Icons.person_outline,
-                  text: '${user['name'] ?? 'Unknown'} - ${user['phone'] ?? ''}',
-                ),
-                _InfoRow(
-                  icon: Icons.payment,
-                  text: 'Payment: ${payment['method'] ?? 'unknown'}',
-                ),
-                _InfoRow(
-                  icon: Icons.payments,
-                  text:
-                      'Total: GHS ${(totals['total'] ?? 0).toString()}',
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Items',
-              style: Theme.of(context).textTheme.labelLarge,
-            ),
-            const SizedBox(height: 6),
-            Column(
-              children: items.map<Widget>((item) {
-                final map = (item as Map?) ?? {};
-                final title = map['title']?.toString() ?? 'Item';
-                final qty = map['quantity']?.toString() ?? '1';
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 2),
-                  child: Row(
-                    children: [
-                      Expanded(child: Text(title)),
-                      Text('x$qty'),
-                    ],
+                  SizedBox(
+                    width: 150,
+                    child: InputDecorator(
+                      decoration: const InputDecoration(
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: stage,
+                          isDense: true,
+                          items: _OrderPageStages.stages
+                              .map(
+                                (s) => DropdownMenuItem(
+                                  value: s,
+                                  child: Text(s),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: _updating
+                              ? null
+                              : (value) async {
+                                  if (value == null || value == stage) {
+                                    return;
+                                  }
+                                  setState(() => _updating = true);
+                                  try {
+                                    await _updateOrderAndCreateNotice(
+                                      newStage: value,
+                                      data: data,
+                                      items: items,
+                                      orderNumber: orderNumber,
+                                    );
+                                    if (!context.mounted) {
+                                      return;
+                                    }
+                                    _showSnack(
+                                      context,
+                                      'Order updated to $value',
+                                    );
+                                  } catch (_) {
+                                    if (!context.mounted) {
+                                      return;
+                                    }
+                                    _showSnack(
+                                      context,
+                                      'Failed to update order',
+                                    );
+                                  } finally {
+                                    if (mounted) {
+                                      setState(() => _updating = false);
+                                    }
+                                  }
+                                },
+                        ),
+                      ),
+                    ),
                   ),
-                );
-              }).toList(),
-            ),
-          ],
+                ],
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 12,
+                runSpacing: 8,
+                children: [
+                  _InfoPill(
+                    icon: Icons.person_outline,
+                    text:
+                        '${user['name'] ?? 'Unknown'} - ${user['phone'] ?? ''}',
+                  ),
+                  _InfoPill(
+                    icon: Icons.payment,
+                    text: 'Payment: ${payment['method'] ?? 'unknown'}',
+                  ),
+                  _InfoPill(
+                    icon: Icons.place_outlined,
+                    text: 'Destination: $deliveryDestination',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Items',
+                style: Theme.of(context)
+                    .textTheme
+                    .labelLarge
+                    ?.copyWith(color: Colors.black54),
+              ),
+              const SizedBox(height: 4),
+              Column(
+                children: itemPreview.map<Widget>((item) {
+                  final map = (item as Map?) ?? {};
+                  final title = map['title']?.toString() ?? 'Item';
+                  final qty = map['quantity']?.toString() ?? '1';
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            title,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Text('x$qty'),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+              if (remaining > 0)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    '+$remaining more',
+                    style: Theme.of(context)
+                        .textTheme
+                        .labelSmall
+                        ?.copyWith(color: Colors.black54),
+                  ),
+                ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Text(
+                    'Total: GHS ${(totals['total'] ?? 0).toString()}',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                  const Spacer(),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: _stageColor(stage).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      stage,
+                      style: TextStyle(
+                          color: _stageColor(stage),
+                          fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.icon, required this.text});
+class _InfoPill extends StatelessWidget {
+  const _InfoPill({required this.icon, required this.text});
 
   final IconData icon;
   final String text;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 18, color: Colors.black54),
-        const SizedBox(width: 6),
-        Text(text),
-      ],
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: Colors.black54),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              text,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelSmall,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
