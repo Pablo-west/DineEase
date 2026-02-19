@@ -111,6 +111,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                           const Spacer(),
                           SegmentedButton<String>(
                             segments: const [
+                              ButtonSegment(value: 'today', label: Text('Today')),
                               ButtonSegment(value: '7d', label: Text('7d')),
                               ButtonSegment(value: '30d', label: Text('30d')),
                               ButtonSegment(value: 'all', label: Text('All')),
@@ -234,7 +235,29 @@ List<QueryDocumentSnapshot<Map<String, dynamic>>> _applyRangeFilter(
   if (range == 'all') {
     return docs;
   }
+
   final now = DateTime.now();
+  if (range == 'today') {
+    final startOfToday = DateTime(now.year, now.month, now.day);
+    final startOfTomorrow = startOfToday.add(const Duration(days: 1));
+    return docs.where((doc) {
+      final data = doc.data();
+      final placedAt = data['placedAt'];
+      DateTime? date;
+      if (placedAt is Timestamp) {
+        date = placedAt.toDate();
+      } else if (placedAt is String) {
+        date = DateTime.tryParse(placedAt);
+      } else if (placedAt is DateTime) {
+        date = placedAt;
+      }
+      if (date == null) {
+        return false;
+      }
+      return !date.isBefore(startOfToday) && date.isBefore(startOfTomorrow);
+    }).toList();
+  }
+
   final days = range == '7d' ? 7 : 30;
   final start = now.subtract(Duration(days: days));
   return docs.where((doc) {
@@ -251,7 +274,7 @@ List<QueryDocumentSnapshot<Map<String, dynamic>>> _applyRangeFilter(
     if (date == null) {
       return false;
     }
-    return date.isAfter(start);
+    return !date.isBefore(start);
   }).toList();
 }
 
