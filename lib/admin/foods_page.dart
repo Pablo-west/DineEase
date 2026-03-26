@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'loading_skeleton.dart';
+import 'vendors_page.dart';
 
 class FoodsPage extends StatefulWidget {
   const FoodsPage({super.key, required this.searchQuery});
@@ -16,6 +17,7 @@ class FoodsPage extends StatefulWidget {
 class _FoodsPageState extends State<FoodsPage> {
   late final Stream<QuerySnapshot<Map<String, dynamic>>> _foodsStream;
   late final Stream<QuerySnapshot<Map<String, dynamic>>> _categoriesStream;
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _vendorsStream;
 
   @override
   void initState() {
@@ -26,128 +28,189 @@ class _FoodsPageState extends State<FoodsPage> {
         .snapshots();
     _categoriesStream =
         FirebaseFirestore.instance.collection('food_categories').snapshots();
+    _vendorsStream =
+        FirebaseFirestore.instance.collection('vendors').orderBy('name').snapshots();
   }
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: _foodsStream,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
+      stream: _vendorsStream,
+      builder: (context, vendorsSnapshot) {
+        if (vendorsSnapshot.connectionState == ConnectionState.waiting) {
           return const _FoodsPageSkeleton();
         }
-        if (snapshot.hasError) {
+        if (vendorsSnapshot.hasError) {
           return FirestoreErrorPanel(
-            title: 'Foods cannot be loaded.',
-            error: snapshot.error,
+            title: 'Vendors cannot be loaded.',
+            error: vendorsSnapshot.error,
           );
         }
-        final docs = snapshot.data?.docs ?? [];
-        return ValueListenableBuilder<String>(
-          valueListenable: widget.searchQuery,
-          builder: (context, query, _) {
-            final normalizedQuery = query.trim().toLowerCase();
-            final filtered = docs.where((doc) {
-              if (normalizedQuery.isEmpty) {
-                return true;
-              }
-              final data = doc.data();
-              final title = data['title']?.toString() ?? '';
-              final category = data['category']?.toString() ?? '';
-              return ('$title $category')
-                  .toLowerCase()
-                  .contains(normalizedQuery);
-            }).toList();
+        final vendorDocs = vendorsSnapshot.data?.docs ?? [];
+        final vendorMap = {
+          for (final doc in vendorDocs)
+            doc.id: (doc.data()['name']?.toString() ?? 'Vendor').trim(),
+        };
 
-            return Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 10,
-                    crossAxisAlignment: WrapCrossAlignment.center,
+        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: _foodsStream,
+          builder: (context, foodsSnapshot) {
+            if (foodsSnapshot.connectionState == ConnectionState.waiting) {
+              return const _FoodsPageSkeleton();
+            }
+            if (foodsSnapshot.hasError) {
+              return FirestoreErrorPanel(
+                title: 'Foods cannot be loaded.',
+                error: foodsSnapshot.error,
+              );
+            }
+            final docs = foodsSnapshot.data?.docs ?? [];
+            return ValueListenableBuilder<String>(
+              valueListenable: widget.searchQuery,
+              builder: (context, query, _) {
+                final normalizedQuery = query.trim().toLowerCase();
+                final filtered = docs.where((doc) {
+                  final data = doc.data();
+                  final title = data['title']?.toString() ?? '';
+                  final category = data['category']?.toString() ?? '';
+                  final vendorName = _resolveVendorName(data, vendorMap);
+                  if (normalizedQuery.isEmpty) {
+                    return true;
+                  }
+                  return ('$title $category $vendorName')
+                      .toLowerCase()
+                      .contains(normalizedQuery);
+                }).toList();
+
+                final vendorCounts = <String, int>{};
+                for (final doc in filtered) {
+                  final vendorName = _resolveVendorName(doc.data(), vendorMap);
+                  vendorCounts[vendorName] = (vendorCounts[vendorName] ?? 0) + 1;
+                }
+
+                return Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
                     children: [
-                      Text(
-                        'Foods',
-                        style: Theme.of(context).textTheme.headlineSmall,
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 10,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text(
+                            'Foods',
+                            style: Theme.of(context).textTheme.headlineSmall,
+                          ),
+                          _CountPill(count: filtered.length, label: 'foods'),
+                          _CountPill(count: vendorDocs.length, label: 'vendors'),
+                          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                            stream: _categoriesStream,
+                            builder: (context, snapshot) {
+                              final docs = snapshot.data?.docs ?? [];
+                              final unique = <String>{};
+                              for (final doc in docs) {
+                                final data = doc.data();
+                                final name = (data['name'] ?? data['label'] ?? '')
+                                    .toString()
+                                    .trim();
+                                if (name.isNotEmpty) {
+                                  unique.add(name.toLowerCase());
+                                }
+                              }
+                              return _CountPill(
+                                count: unique.length,
+                                label: 'categories',
+                              );
+                            },
+                          ),
+                          FilledButton.icon(
+                            onPressed: () async {
+                              await showDialog(
+                                context: context,
+                                builder: (context) => const FoodFormDialog(),
+                              );
+                            },
+                            icon: const Icon(Icons.add),
+                            label: const Text('Add Food'),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: () async {
+                              await showDialog(
+                                context: context,
+                                builder: (context) => const VendorFormDialog(),
+                              );
+                            },
+                            icon: const Icon(Icons.storefront_outlined),
+                            label: const Text('Add Vendor'),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: () async {
+                              await showDialog(
+                                context: context,
+                                builder: (context) =>
+                                    const _CategoryManagerDialog(),
+                              );
+                            },
+                            icon: const Icon(Icons.category_outlined),
+                            label: const Text('Add / Modify Categories'),
+                          ),
+                        ],
                       ),
-                      _CountPill(count: filtered.length, label: 'foods'),
-                      StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                        stream: _categoriesStream,
-                        builder: (context, snapshot) {
-                          final docs = snapshot.data?.docs ?? [];
-                          final unique = <String>{};
-                          for (final doc in docs) {
-                            final data = doc.data();
-                            final name = (data['name'] ?? data['label'] ?? '')
-                                .toString()
-                                .trim();
-                            if (name.isNotEmpty) {
-                              unique.add(name.toLowerCase());
-                            }
-                          }
-                          return _CountPill(
-                            count: unique.length,
-                            label: 'categories',
-                          );
-                        },
+                      const SizedBox(height: 14),
+                      _FoodHintBar(
+                        total: filtered.length,
+                        vendorCounts: vendorCounts,
                       ),
-                      FilledButton.icon(
-                        onPressed: () async {
-                          await showDialog(
-                            context: context,
-                            builder: (context) => const FoodFormDialog(),
-                          );
-                        },
-                        icon: const Icon(Icons.add),
-                        label: const Text('Add Food'),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: () async {
-                          await showDialog(
-                            context: context,
-                            builder: (context) =>
-                                const _CategoryManagerDialog(),
-                          );
-                        },
-                        icon: const Icon(Icons.category_outlined),
-                        label: const Text('Add / Modify Categories'),
+                      Expanded(
+                        child: filtered.isEmpty
+                            ? Center(
+                                child: Text(
+                                  'No foods found.',
+                                  style: Theme.of(context).textTheme.bodyLarge,
+                                ),
+                              )
+                            : GridView.builder(
+                                gridDelegate:
+                                    const SliverGridDelegateWithMaxCrossAxisExtent(
+                                  maxCrossAxisExtent: 300,
+                                  childAspectRatio: 0.9,
+                                  crossAxisSpacing: 14,
+                                  mainAxisSpacing: 14,
+                                ),
+                                itemCount: filtered.length,
+                                itemBuilder: (context, index) {
+                                  final doc = filtered[index];
+                                  return _FoodCard(
+                                    doc: doc,
+                                    vendorName: _resolveVendorName(
+                                      doc.data(),
+                                      vendorMap,
+                                    ),
+                                  );
+                                },
+                              ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 14),
-                  _FoodHintBar(total: filtered.length),
-                  Expanded(
-                    child: filtered.isEmpty
-                        ? Center(
-                            child: Text(
-                              'No foods found.',
-                              style: Theme.of(context).textTheme.bodyLarge,
-                            ),
-                          )
-                        : GridView.builder(
-                            gridDelegate:
-                                const SliverGridDelegateWithMaxCrossAxisExtent(
-                              maxCrossAxisExtent: 300,
-                              childAspectRatio: 0.85,
-                              crossAxisSpacing: 14,
-                              mainAxisSpacing: 14,
-                            ),
-                            itemCount: filtered.length,
-                            itemBuilder: (context, index) {
-                              final doc = filtered[index];
-                              return _FoodCard(doc: doc);
-                            },
-                          ),
-                  ),
-                ],
-              ),
+                );
+              },
             );
           },
         );
       },
     );
+  }
+
+  String _resolveVendorName(
+    Map<String, dynamic> data,
+    Map<String, String> vendorMap,
+  ) {
+    final vendorId = data['vendorId']?.toString() ?? '';
+    if (vendorId.isNotEmpty && vendorMap.containsKey(vendorId)) {
+      return vendorMap[vendorId]!;
+    }
+    final vendorName = (data['vendorName'] ?? '').toString().trim();
+    return vendorName.isEmpty ? 'Unassigned vendor' : vendorName;
   }
 }
 
@@ -162,9 +225,10 @@ void _showSnack(BuildContext context, String message) {
 }
 
 class _FoodCard extends StatelessWidget {
-  const _FoodCard({required this.doc});
+  const _FoodCard({required this.doc, required this.vendorName});
 
   final QueryDocumentSnapshot<Map<String, dynamic>> doc;
+  final String vendorName;
 
   @override
   Widget build(BuildContext context) {
@@ -234,6 +298,11 @@ class _FoodCard extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 6),
+                    _MetaChip(
+                      icon: Icons.storefront_outlined,
+                      label: vendorName,
+                    ),
+                    const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,
                       runSpacing: 6,
@@ -402,9 +471,10 @@ class _FoodsPageSkeleton extends StatelessWidget {
 }
 
 class _FoodHintBar extends StatelessWidget {
-  const _FoodHintBar({required this.total});
+  const _FoodHintBar({required this.total, required this.vendorCounts});
 
   final int total;
+  final Map<String, int> vendorCounts;
 
   @override
   Widget build(BuildContext context) {
@@ -422,12 +492,14 @@ class _FoodHintBar extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Tip: Use "Create & Add Another" to add multiple foods quickly.',
+              vendorCounts.isEmpty
+                  ? 'Tip: Add vendors first, then assign every food to the right vendor.'
+                  : 'Tip: Use "Create & Add Another" to build each vendor menu quickly.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
           Text(
-            'Total: $total',
+            'Vendors: ${vendorCounts.length} | Foods: $total',
             style: Theme.of(context).textTheme.labelMedium,
           ),
         ],
@@ -877,6 +949,7 @@ class _FoodFormDialogState extends State<FoodFormDialog> {
   final _titleController = TextEditingController();
   final _subtitleController = TextEditingController();
   final _categoryController = TextEditingController();
+  final _vendorController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _priceController = TextEditingController();
   final _ratingController = ValueNotifier<double>(4);
@@ -884,7 +957,9 @@ class _FoodFormDialogState extends State<FoodFormDialog> {
   final _timeController = TextEditingController();
   Duration _duration = const Duration(minutes: 20);
   List<String> _categoryOptions = [];
+  List<_VendorOption> _vendorOptions = [];
   bool _loadingCategories = true;
+  bool _loadingVendors = true;
   final _ingredientsController = TextEditingController();
   final _imageUrlController = TextEditingController();
   final _foodType = <String>{};
@@ -897,6 +972,7 @@ class _FoodFormDialogState extends State<FoodFormDialog> {
       _titleController.text = data['title']?.toString() ?? '';
       _subtitleController.text = data['subtitle']?.toString() ?? '';
       _categoryController.text = data['category']?.toString() ?? '';
+      _vendorController.text = data['vendorId']?.toString() ?? '';
       _descriptionController.text = data['description']?.toString() ?? '';
       _priceController.text = data['price']?.toString() ?? '';
       _ratingController.value = (data['rating'] as num?)?.toDouble() ?? 4;
@@ -919,6 +995,7 @@ class _FoodFormDialogState extends State<FoodFormDialog> {
     _titleController.dispose();
     _subtitleController.dispose();
     _categoryController.dispose();
+    _vendorController.dispose();
     _descriptionController.dispose();
     _priceController.dispose();
     _ratingController.dispose();
@@ -949,6 +1026,8 @@ class _FoodFormDialogState extends State<FoodFormDialog> {
       'title': _titleController.text.trim(),
       'subtitle': _subtitleController.text.trim(),
       'category': _categoryController.text.trim(),
+      'vendorId': _vendorController.text.trim(),
+      'vendorName': _selectedVendorName,
       'description': _descriptionController.text.trim(),
       'price': double.parse(_priceController.text.trim()),
       'rating': _ratingController.value,
@@ -990,6 +1069,8 @@ class _FoodFormDialogState extends State<FoodFormDialog> {
           await FirebaseFirestore.instance.collection('foods').get();
       final categorySnapshot =
           await FirebaseFirestore.instance.collection('food_categories').get();
+      final vendorSnapshot =
+          await FirebaseFirestore.instance.collection('vendors').get();
       final normalized = <String, String>{};
       for (final doc in foodsSnapshot.docs) {
         final raw = doc.data()['category']?.toString() ?? '';
@@ -1012,7 +1093,19 @@ class _FoodFormDialogState extends State<FoodFormDialog> {
       }
       setState(() {
         _categoryOptions = normalized.values.toList()..sort();
+        _vendorOptions = vendorSnapshot.docs
+            .map(
+              (doc) => _VendorOption(
+                id: doc.id,
+                name: (doc.data()['name'] ?? 'Vendor').toString().trim(),
+                isActive: doc.data()['isActive'] != false,
+              ),
+            )
+            .where((vendor) => vendor.name.isNotEmpty)
+            .toList()
+          ..sort((a, b) => a.name.compareTo(b.name));
         _loadingCategories = false;
+        _loadingVendors = false;
       });
     } catch (_) {
       if (!mounted) {
@@ -1020,8 +1113,19 @@ class _FoodFormDialogState extends State<FoodFormDialog> {
       }
       setState(() {
         _loadingCategories = false;
+        _loadingVendors = false;
       });
     }
+  }
+
+  String get _selectedVendorName {
+    final currentVendorId = _vendorController.text.trim();
+    for (final vendor in _vendorOptions) {
+      if (vendor.id == currentVendorId) {
+        return vendor.name;
+      }
+    }
+    return (widget.existing?['vendorName'] ?? '').toString().trim();
   }
 
   @override
@@ -1087,6 +1191,54 @@ class _FoodFormDialogState extends State<FoodFormDialog> {
                                 const SizedBox(height: 12),
                                 Row(
                                   children: [
+                                    Expanded(
+                                      child: Builder(
+                                        builder: (context) {
+                                          final selectedVendorId =
+                                              _vendorController.text.trim().isEmpty
+                                                  ? null
+                                                  : _vendorController.text.trim();
+                                          return DropdownButtonFormField<String>(
+                                            key: ValueKey(
+                                              'vendor-$selectedVendorId-${_vendorOptions.length}',
+                                            ),
+                                            initialValue: selectedVendorId,
+                                            decoration: InputDecoration(
+                                              labelText: 'Vendor',
+                                              helperText: _loadingVendors
+                                                  ? 'Loading vendors...'
+                                                  : null,
+                                            ),
+                                            items: _vendorOptions
+                                                .map(
+                                                  (vendor) => DropdownMenuItem(
+                                                    value: vendor.id,
+                                                    child: Text(
+                                                      vendor.isActive
+                                                          ? vendor.name
+                                                          : '${vendor.name} (inactive)',
+                                                    ),
+                                                  ),
+                                                )
+                                                .toList(),
+                                            onChanged: (value) {
+                                              setState(() {
+                                                _vendorController.text =
+                                                    value ?? '';
+                                              });
+                                            },
+                                            validator: (value) {
+                                              if (value == null ||
+                                                  value.trim().isEmpty) {
+                                                return 'Required';
+                                              }
+                                              return null;
+                                            },
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
                                     Expanded(
                                       child: Builder(
                                         builder: (context) {
@@ -1156,7 +1308,11 @@ class _FoodFormDialogState extends State<FoodFormDialog> {
                                         },
                                       ),
                                     ),
-                                    const SizedBox(width: 12),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  children: [
                                     Expanded(
                                       child: TextFormField(
                                         controller: _timeController,
@@ -1503,6 +1659,7 @@ class _FoodFormDialogState extends State<FoodFormDialog> {
     _titleController.clear();
     _subtitleController.clear();
     _categoryController.clear();
+    _vendorController.clear();
     _descriptionController.clear();
     _priceController.clear();
     _caloriesController.clear();
@@ -1514,4 +1671,16 @@ class _FoodFormDialogState extends State<FoodFormDialog> {
     _foodType.clear();
     setState(() {});
   }
+}
+
+class _VendorOption {
+  const _VendorOption({
+    required this.id,
+    required this.name,
+    required this.isActive,
+  });
+
+  final String id;
+  final String name;
+  final bool isActive;
 }

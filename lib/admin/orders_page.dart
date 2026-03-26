@@ -16,6 +16,7 @@ class OrdersPage extends StatefulWidget {
 class _OrdersPageState extends State<OrdersPage> {
   static const stages = ['placed', 'preparing', 'inKitchen', 'delivered'];
   String _stageFilter = 'all';
+  String _vendorFilter = 'all';
   DateTimeRange? _dateRange;
 
   @override
@@ -73,16 +74,28 @@ class _OrdersPageState extends State<OrdersPage> {
                 user['name']?.toString() ?? '',
                 user['phone']?.toString() ?? '',
                 payment['method']?.toString() ?? '',
+                ..._resolveVendorNames(data),
               ].join(' ').toLowerCase();
               return searchPool.contains(normalizedQuery);
             }).toList();
 
             final filtered = baseFiltered.where((doc) {
-              if (_stageFilter == 'all') {
-                return true;
+              final data = doc.data();
+              if (_stageFilter != 'all') {
+                final stage = data['stage']?.toString() ?? '';
+                if (stage != _stageFilter) {
+                  return false;
+                }
               }
-              final stage = doc.data()['stage']?.toString() ?? '';
-              return stage == _stageFilter;
+              if (_vendorFilter != 'all') {
+                final vendorNames = _resolveVendorNames(data)
+                    .map((name) => name.toLowerCase())
+                    .toSet();
+                if (!vendorNames.contains(_vendorFilter.toLowerCase())) {
+                  return false;
+                }
+              }
+              return true;
             }).toList();
 
             final totalAmount = filtered.fold<double>(0.0, (acc, doc) {
@@ -95,11 +108,14 @@ class _OrdersPageState extends State<OrdersPage> {
             });
 
             final stageCounts = <String, int>{for (var s in stages) s: 0};
+            final vendorNames = <String>{};
             for (final doc in baseFiltered) {
-              final stage = doc.data()['stage']?.toString();
+              final data = doc.data();
+              final stage = data['stage']?.toString();
               if (stage != null && stageCounts.containsKey(stage)) {
                 stageCounts[stage] = stageCounts[stage]! + 1;
               }
+              vendorNames.addAll(_resolveVendorNames(data));
             }
 
             // final hasActiveFilters = _stageFilter != 'all' ||
@@ -161,8 +177,12 @@ class _OrdersPageState extends State<OrdersPage> {
                           allCount: baseFiltered.length,
                           stageCounts: stageCounts,
                           currentStage: _stageFilter,
+                          vendorOptions: vendorNames.toList()..sort(),
+                          currentVendor: _vendorFilter,
                           onStageSelect: (stage) =>
                               setState(() => _stageFilter = stage),
+                          onVendorSelect: (vendor) =>
+                              setState(() => _vendorFilter = vendor),
                         );
 
                         if (isWide) {
@@ -257,6 +277,29 @@ class _OrdersPageState extends State<OrdersPage> {
     }
     return null;
   }
+
+  List<String> _resolveVendorNames(Map<String, dynamic> data) {
+    final vendors = <String>{};
+    final topLevelVendor = (data['vendorName'] ?? '').toString().trim();
+    if (topLevelVendor.isNotEmpty) {
+      vendors.add(topLevelVendor);
+    }
+    final topLevelVendorId = (data['vendorId'] ?? '').toString().trim();
+    final items = (data['items'] as List?) ?? const [];
+    for (final item in items) {
+      final map = (item as Map?) ?? const {};
+      final name = (map['vendorName'] ?? '').toString().trim();
+      if (name.isNotEmpty) {
+        vendors.add(name);
+      } else if (topLevelVendorId.isNotEmpty) {
+        vendors.add('Assigned vendor');
+      }
+    }
+    if (vendors.isEmpty) {
+      vendors.add('Unassigned vendor');
+    }
+    return vendors.toList(growable: false);
+  }
 }
 
 void _showSnack(BuildContext context, String message) {
@@ -315,7 +358,10 @@ class _SummaryHeader extends StatelessWidget {
     required this.allCount,
     required this.stageCounts,
     required this.currentStage,
+    required this.vendorOptions,
+    required this.currentVendor,
     required this.onStageSelect,
+    required this.onVendorSelect,
   });
 
   final int totalOrders;
@@ -323,7 +369,10 @@ class _SummaryHeader extends StatelessWidget {
   final int allCount;
   final Map<String, int> stageCounts;
   final String currentStage;
+  final List<String> vendorOptions;
+  final String currentVendor;
   final ValueChanged<String> onStageSelect;
+  final ValueChanged<String> onVendorSelect;
 
   @override
   Widget build(BuildContext context) {
@@ -392,6 +441,30 @@ class _SummaryHeader extends StatelessWidget {
                         );
                       }),
                     ],
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    initialValue: currentVendor,
+                    decoration: const InputDecoration(
+                      labelText: 'Vendor orders list',
+                    ),
+                    items: [
+                      const DropdownMenuItem(
+                        value: 'all',
+                        child: Text('All vendors'),
+                      ),
+                      ...vendorOptions.map(
+                        (vendor) => DropdownMenuItem(
+                          value: vendor,
+                          child: Text(vendor),
+                        ),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        onVendorSelect(value);
+                      }
+                    },
                   ),
                 ],
               ),
@@ -596,6 +669,7 @@ class _OrderCardState extends State<_OrderCard> {
     final deliveryDestination = deliveryType == 'table'
         ? 'Table ${tableNumber.isEmpty ? '-' : tableNumber}'
         : (address.isEmpty ? 'Doorstep' : address);
+    final vendorNames = _resolveVendorNames(data);
 
     final itemPreview = items.take(2).toList();
     final remaining = items.length - itemPreview.length;
@@ -706,6 +780,12 @@ class _OrderCardState extends State<_OrderCard> {
                 spacing: 12,
                 runSpacing: 8,
                 children: [
+                  ...vendorNames.map(
+                    (vendor) => _InfoPill(
+                      icon: Icons.storefront_outlined,
+                      text: 'Vendor: $vendor',
+                    ),
+                  ),
                   _InfoPill(
                     icon: Icons.person_outline,
                     text:
@@ -735,13 +815,14 @@ class _OrderCardState extends State<_OrderCard> {
                   final map = (item as Map?) ?? {};
                   final title = map['title']?.toString() ?? 'Item';
                   final qty = map['quantity']?.toString() ?? '1';
+                  final vendorName = map['vendorName']?.toString() ?? '';
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 2),
                     child: Row(
                       children: [
                         Expanded(
                           child: Text(
-                            title,
+                            vendorName.isEmpty ? title : '$title | $vendorName',
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -794,6 +875,26 @@ class _OrderCardState extends State<_OrderCard> {
         ),
       ),
     );
+  }
+
+  List<String> _resolveVendorNames(Map<String, dynamic> data) {
+    final names = <String>{};
+    final topLevelVendor = (data['vendorName'] ?? '').toString().trim();
+    if (topLevelVendor.isNotEmpty) {
+      names.add(topLevelVendor);
+    }
+    final items = (data['items'] as List?) ?? const [];
+    for (final item in items) {
+      final map = (item as Map?) ?? const {};
+      final vendorName = (map['vendorName'] ?? '').toString().trim();
+      if (vendorName.isNotEmpty) {
+        names.add(vendorName);
+      }
+    }
+    if (names.isEmpty) {
+      names.add('Unassigned vendor');
+    }
+    return names.toList(growable: false);
   }
 }
 

@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import 'admin_ui.dart';
 import 'loading_skeleton.dart';
 
 class AnalyticsPage extends StatefulWidget {
@@ -102,24 +103,31 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Text(
-                            'Analytics Dashboard',
-                            style: Theme.of(context).textTheme.headlineSmall,
+                      AdminPageIntro(
+                        icon: Icons.insights_outlined,
+                        title: 'Analytics Dashboard',
+                        subtitle:
+                            'Read business performance quickly with a cleaner operational view.',
+                        trailing: SegmentedButton<String>(
+                          segments: const [
+                            ButtonSegment(value: 'today', label: Text('Today')),
+                            ButtonSegment(value: '7d', label: Text('7d')),
+                            ButtonSegment(value: '30d', label: Text('30d')),
+                            ButtonSegment(value: 'all', label: Text('All')),
+                          ],
+                          selected: {_range},
+                          onSelectionChanged: (selection) {
+                            setState(() => _range = selection.first);
+                          },
+                        ),
+                        badges: [
+                          AdminBadge(
+                            icon: Icons.receipt_long,
+                            label: '${filteredOrders.length} orders in view',
                           ),
-                          const Spacer(),
-                          SegmentedButton<String>(
-                            segments: const [
-                              ButtonSegment(value: 'today', label: Text('Today')),
-                              ButtonSegment(value: '7d', label: Text('7d')),
-                              ButtonSegment(value: '30d', label: Text('30d')),
-                              ButtonSegment(value: 'all', label: Text('All')),
-                            ],
-                            selected: {_range},
-                            onSelectionChanged: (selection) {
-                              setState(() => _range = selection.first);
-                            },
+                          AdminBadge(
+                            icon: Icons.payments_outlined,
+                            label: 'GHS ${totalRevenue.toStringAsFixed(2)} revenue',
                           ),
                         ],
                       ),
@@ -172,38 +180,21 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                         ),
                       ],
                       const SizedBox(height: 14),
-                      Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Order Stage Breakdown',
-                                style: Theme.of(context).textTheme.titleMedium,
-                              ),
-                              const SizedBox(height: 12),
-                              _OrderStageBreakdown(stageCounts: stageCounts),
-                            ],
-                          ),
-                        ),
+                      AdminSectionCard(
+                        title: 'Order Stage Breakdown',
+                        subtitle:
+                            'Understand where order volume is accumulating in the funnel.',
+                        child: _OrderStageBreakdown(stageCounts: stageCounts),
                       ),
                       const SizedBox(height: 14),
-                      Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Top Ordered Foods',
-                                style: Theme.of(context).textTheme.titleMedium,
-                              ),
-                              const SizedBox(height: 10),
-                              if (topFoods.isEmpty)
-                                const Text('No food order activity yet.')
-                              else
-                                ...topFoods.take(8).map((entry) {
+                      AdminSectionCard(
+                        title: 'Top Ordered Foods',
+                        subtitle:
+                            'Spot winners quickly so vendors and promos can react faster.',
+                        child: topFoods.isEmpty
+                            ? const Text('No food order activity yet.')
+                            : Column(
+                                children: topFoods.take(8).map((entry) {
                                   return ListTile(
                                     dense: true,
                                     contentPadding: EdgeInsets.zero,
@@ -211,10 +202,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                                     title: Text(entry.key),
                                     trailing: Text('${entry.value} orders'),
                                   );
-                                }),
-                            ],
-                          ),
-                        ),
+                                }).toList(),
+                              ),
                       ),
                     ],
                   ),
@@ -298,14 +287,22 @@ class _MetricCard extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Icon(icon, color: scheme.primary),
               const SizedBox(height: 10),
-              Text(title, style: Theme.of(context).textTheme.labelMedium),
+              Text(
+                title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelMedium,
+              ),
               const SizedBox(height: 4),
               Text(
                 value,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
                 style: Theme.of(
                   context,
                 ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
@@ -323,19 +320,17 @@ class _AnalyticsSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.all(20),
-      child: Column(
-        children: [
-          SkeletonBox(height: 34),
-          SizedBox(height: 14),
-          SkeletonBox(height: 120),
-          SizedBox(height: 14),
-          SkeletonBox(height: 180),
-          SizedBox(height: 14),
-          SkeletonBox(height: 220),
-        ],
-      ),
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: const [
+        SkeletonBox(height: 34),
+        SizedBox(height: 14),
+        SkeletonBox(height: 120),
+        SizedBox(height: 14),
+        SkeletonBox(height: 180),
+        SizedBox(height: 14),
+        SkeletonBox(height: 220),
+      ],
     );
   }
 }
@@ -430,6 +425,7 @@ class _StageStatTile extends StatelessWidget {
         border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
@@ -443,15 +439,21 @@ class _StageStatTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              Text(
-                label,
-                style: Theme.of(context).textTheme.labelLarge,
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
               ),
             ],
           ),
           const SizedBox(height: 8),
           Text(
             '$value orders',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: Theme.of(
               context,
             ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),

@@ -31,6 +31,8 @@ void main() async {
             appId: "1:328696000707:web:6fbd18df36b31ca219f276",
             messagingSenderId: "G-FKD3GQ32BS",
             projectId: "dineease-f81e5"));
+  } else {
+    await Firebase.initializeApp();
   }
 
   runApp(kIsWeb ? const AdminApp() : const MyApp());

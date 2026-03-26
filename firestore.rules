@@ -60,13 +60,15 @@ service cloud.firestore {
 
     // ---------- Orders ----------
     match /orders/{orderId} {
-      // Customer creates own order
-      allow create: if signedIn()
-        && request.resource.data.userId == request.auth.uid;
+      // Public menu app can create guest orders; signed-in customers can also create.
+      allow create: if (
+        !signedIn()
+        || request.resource.data.userId == request.auth.uid
+        || isOpsStaff()
+      );
 
-      // Customer reads own orders; ops staff reads all
-      allow read: if signedIn()
-        && (resource.data.userId == request.auth.uid || isOpsStaff());
+      // Current mobile tracker reads guest orders by meal number, so reads remain open.
+      allow read: if true;
 
       // Ops staff updates orders (e.g., stage changes)
       allow update: if signedIn() && isOpsStaff();
@@ -77,6 +79,11 @@ service cloud.firestore {
 
     // ---------- Menu ----------
     match /foods/{foodId} {
+      allow read: if true;
+      allow create, update, delete: if signedIn() && isKitchenStaff();
+    }
+
+    match /vendors/{vendorId} {
       allow read: if true;
       allow create, update, delete: if signedIn() && isKitchenStaff();
     }

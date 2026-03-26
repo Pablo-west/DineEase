@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import 'admin_ui.dart';
 import 'loading_skeleton.dart';
 
 class FinancePage extends StatelessWidget {
@@ -70,9 +71,21 @@ class FinancePage extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Finance & Reconciliation',
-                style: Theme.of(context).textTheme.headlineSmall,
+              AdminPageIntro(
+                icon: Icons.account_balance_wallet_outlined,
+                title: 'Finance & Reconciliation',
+                subtitle:
+                    'Keep revenue visibility, payment mix, and reconciliation work in one streamlined workspace.',
+                badges: [
+                  AdminBadge(
+                    icon: Icons.today,
+                    label: 'Today: GHS ${todayRevenue.toStringAsFixed(2)}',
+                  ),
+                  AdminBadge(
+                    icon: Icons.calendar_month,
+                    label: 'Month: GHS ${monthRevenue.toStringAsFixed(2)}',
+                  ),
+                ],
               ),
               const SizedBox(height: 12),
               Wrap(
@@ -102,21 +115,14 @@ class FinancePage extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 14),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Payment Method Breakdown',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 10),
-                      if (sortedMethods.isEmpty)
-                        const Text('No payment data yet.')
-                      else
-                        ...sortedMethods.map((entry) {
+              AdminSectionCard(
+                title: 'Payment Method Breakdown',
+                subtitle:
+                    'See where money is coming from before you reconcile the books.',
+                child: sortedMethods.isEmpty
+                    ? const Text('No payment data yet.')
+                    : Column(
+                        children: sortedMethods.map((entry) {
                           return ListTile(
                             dense: true,
                             contentPadding: EdgeInsets.zero,
@@ -125,10 +131,8 @@ class FinancePage extends StatelessWidget {
                               'GHS ${entry.value.toStringAsFixed(2)}',
                             ),
                           );
-                        }),
-                    ],
-                  ),
-                ),
+                        }).toList(),
+                      ),
               ),
               const SizedBox(height: 14),
               _ReconciliationSection(monthRevenue: monthRevenue),

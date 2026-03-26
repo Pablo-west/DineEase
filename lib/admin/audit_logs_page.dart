@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import 'admin_ui.dart';
 import 'loading_skeleton.dart';
 
 class AuditLogsPage extends StatelessWidget {
@@ -49,34 +50,26 @@ class AuditLogsPage extends StatelessWidget {
               padding: const EdgeInsets.all(20),
               child: Column(
                 children: [
-                  Row(
-                    children: [
-                      Text(
-                        'Audit Logs',
-                        style: Theme.of(context).textTheme.headlineSmall,
-                      ),
-                      const Spacer(),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .primary
-                              .withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                        child: Text('${filtered.length} logs'),
+                  AdminPageIntro(
+                    icon: Icons.fact_check_outlined,
+                    title: 'Audit Logs',
+                    subtitle:
+                        'Review critical admin activity with a cleaner, easier-to-scan trail.',
+                    badges: [
+                      AdminBadge(
+                        icon: Icons.receipt_long,
+                        label: '${filtered.length} logs',
                       ),
                     ],
                   ),
                   const SizedBox(height: 12),
                   Expanded(
                     child: filtered.isEmpty
-                        ? const Center(
-                            child: Text('No audit logs found.'),
+                        ? const AdminEmptyState(
+                            icon: Icons.history_toggle_off,
+                            title: 'No audit logs found',
+                            message:
+                                'New administrative actions will appear here automatically.',
                           )
                         : ListView.builder(
                             itemCount: filtered.length,

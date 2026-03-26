@@ -6,9 +6,9 @@ class DatabaseMethods {
   Future<void> addOrder(Map<String, dynamic> orderInfoMap, String id) async {
     try {
       await FirebaseFirestore.instance
-          .collection("Order")
+          .collection("orders")
           .doc(id)
-          .set(orderInfoMap);
+          .set(orderInfoMap, SetOptions(merge: true));
     } catch (e) {
       // Handle error here
       print("Error adding order: $e");
@@ -17,7 +17,7 @@ class DatabaseMethods {
 
   Future<Stream<QuerySnapshot>> getOrder() async {
     return FirebaseFirestore.instance
-        .collection("Order")
+        .collection("orders")
         .orderBy("timestamp", descending: true)
         .snapshots();
   }
