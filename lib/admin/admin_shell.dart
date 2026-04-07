@@ -295,7 +295,7 @@ class _AdminShellState extends State<AdminShell> {
       case 6:
         return CrmPage(searchQuery: _searchQuery);
       case 7:
-        return const FinancePage();
+        return FinancePage(searchQuery: _searchQuery);
       case 8:
         return AuditLogsPage(searchQuery: _searchQuery);
       case 9:

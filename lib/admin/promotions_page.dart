@@ -1,81 +1,346 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:dine_ease/admin/admin_ui.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'loading_skeleton.dart';
 
-class PromotionsPage extends StatelessWidget {
+class PromotionsPage extends StatefulWidget {
   const PromotionsPage({super.key, required this.searchQuery});
 
   final ValueListenable<String> searchQuery;
 
   @override
+  State<PromotionsPage> createState() => _PromotionsPageState();
+}
+
+class _PromotionsPageState extends State<PromotionsPage> {
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _promotionsStream;
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _pricingStream;
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _announcementsStream;
+
+  @override
+  void initState() {
+    super.initState();
+    final firestore = FirebaseFirestore.instance;
+    _promotionsStream = firestore.collection('promotions').snapshots();
+    _pricingStream = firestore.collection('pricing_rules').snapshots();
+    _announcementsStream = firestore.collection('announcements').snapshots();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return const DefaultTabController(
-      length: 3,
-      child: Column(
-        children: [
-          SizedBox(height: 8),
-          TabBar(
-            isScrollable: true,
-            tabs: [
-              Tab(text: 'Promotions'),
-              Tab(text: 'Pricing Rules'),
-              Tab(text: 'Announcements'),
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: _promotionsStream,
+      builder: (context, promotionsSnap) {
+        if (promotionsSnap.connectionState == ConnectionState.waiting) {
+          return const _PromoSkeleton();
+        }
+        if (promotionsSnap.hasError) {
+          return FirestoreErrorPanel(
+            title: 'Promotions cannot be loaded.',
+            error: promotionsSnap.error,
+          );
+        }
+
+        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: _pricingStream,
+          builder: (context, pricingSnap) {
+            if (pricingSnap.connectionState == ConnectionState.waiting) {
+              return const _PromoSkeleton();
+            }
+            if (pricingSnap.hasError) {
+              return FirestoreErrorPanel(
+                title: 'Pricing rules cannot be loaded.',
+                error: pricingSnap.error,
+              );
+            }
+
+            return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: _announcementsStream,
+              builder: (context, announcementsSnap) {
+                if (announcementsSnap.connectionState ==
+                    ConnectionState.waiting) {
+                  return const _PromoSkeleton();
+                }
+                if (announcementsSnap.hasError) {
+                  return FirestoreErrorPanel(
+                    title: 'Announcements cannot be loaded.',
+                    error: announcementsSnap.error,
+                  );
+                }
+
+                final promotions = promotionsSnap.data?.docs ?? [];
+                final pricingRules = pricingSnap.data?.docs ?? [];
+                final announcements = announcementsSnap.data?.docs ?? [];
+                final activePromotions = promotions
+                    .where((doc) => doc.data()['active'] == true)
+                    .length;
+                final activeRules = pricingRules
+                    .where((doc) => doc.data()['active'] == true)
+                    .length;
+                final activeAnnouncements = announcements
+                    .where((doc) => doc.data()['active'] == true)
+                    .length;
+                final liveCount =
+                    activePromotions + activeRules + activeAnnouncements;
+
+                return LayoutBuilder(
+                  builder: (context, pageConstraints) {
+                    return DefaultTabController(
+                      length: 3,
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(20),
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            minHeight: pageConstraints.maxHeight,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              AdminPageIntro(
+                                icon: Icons.campaign_outlined,
+                                title: 'Promotions Studio',
+                                subtitle:
+                                    'Launch offers, price rules, and announcements from one coordinated workspace.',
+                                trailing: FilledButton.icon(
+                                  onPressed: () => _showQuickCreate(context),
+                                  icon: const Icon(Icons.add_chart_outlined),
+                                  label: const Text('Studio Tips'),
+                                ),
+                                badges: [
+                                  AdminBadge(
+                                    icon: Icons.local_fire_department_outlined,
+                                    label: '$liveCount live items',
+                                  ),
+                                  AdminBadge(
+                                    icon: Icons.campaign_outlined,
+                                    label: '${promotions.length} promotions',
+                                  ),
+                                  AdminBadge(
+                                    icon: Icons.notifications_active_outlined,
+                                    label:
+                                        '${announcements.length} announcements',
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 14),
+                              Wrap(
+                                spacing: 12,
+                                runSpacing: 12,
+                                children: [
+                                  _StudioMetricCard(
+                                    title: 'Promotions',
+                                    value: promotions.length.toString(),
+                                    subtitle: '$activePromotions active',
+                                    icon: Icons.campaign_outlined,
+                                  ),
+                                  _StudioMetricCard(
+                                    title: 'Pricing Rules',
+                                    value: pricingRules.length.toString(),
+                                    subtitle: '$activeRules active',
+                                    icon: Icons.price_change_outlined,
+                                  ),
+                                  _StudioMetricCard(
+                                    title: 'Announcements',
+                                    value: announcements.length.toString(),
+                                    subtitle: '$activeAnnouncements active',
+                                    icon: Icons.announcement_outlined,
+                                  ),
+                                  _StudioMetricCard(
+                                    title: 'Live Coverage',
+                                    value: '$liveCount',
+                                    subtitle: 'Across all tabs',
+                                    icon: Icons.insights_outlined,
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 14),
+                              AdminSectionCard(
+                                title: 'Studio Navigation',
+                                subtitle:
+                                    'Switch between your promotion assets, pricing logic, and broadcasts.',
+                                padding:
+                                    const EdgeInsets.fromLTRB(16, 16, 16, 12),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const TabBar(
+                                      isScrollable: true,
+                                      tabs: [
+                                        Tab(text: 'Promotions'),
+                                        Tab(text: 'Pricing Rules'),
+                                        Tab(text: 'Announcements'),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+                                    SizedBox(
+                                      height: 620,
+                                      child: TabBarView(
+                                        children: [
+                                          _PromotionsTab(
+                                              searchQuery: widget.searchQuery),
+                                          _PricingRulesTab(
+                                              searchQuery: widget.searchQuery),
+                                          _AnnouncementsTab(
+                                              searchQuery: widget.searchQuery),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showQuickCreate(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Promotions Studio'),
+          content: const Text(
+            'Use the tabs below to create or edit promotions, pricing rules, and announcements. The header is designed as an overview and control surface.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _StudioMetricCard extends StatelessWidget {
+  const _StudioMetricCard({
+    required this.title,
+    required this.value,
+    required this.subtitle,
+    required this.icon,
+  });
+
+  final String title;
+  final String value;
+  final String subtitle;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return SizedBox(
+      width: 240,
+      child: Card(
+        elevation: 0,
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side:
+              BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.45)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: scheme.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Icon(icon, size: 18, color: scheme.primary),
+                  ),
+                  const Spacer(),
+                  Text(
+                    title,
+                    style: Theme.of(context).textTheme.labelMedium,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Text(
+                value,
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                subtitle,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
             ],
           ),
-          Expanded(
-            child: TabBarView(
-              children: [
-                _PromotionsTab(),
-                _PricingRulesTab(),
-                _AnnouncementsTab(),
-              ],
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 }
 
 class _PromotionsTab extends StatelessWidget {
-  const _PromotionsTab();
+  const _PromotionsTab({required this.searchQuery});
+
+  final ValueListenable<String> searchQuery;
 
   @override
   Widget build(BuildContext context) {
-    return const _PromotionsManager();
+    return _PromotionsManager(searchQuery: searchQuery);
   }
 }
 
 class _PricingRulesTab extends StatelessWidget {
-  const _PricingRulesTab();
+  const _PricingRulesTab({required this.searchQuery});
+
+  final ValueListenable<String> searchQuery;
 
   @override
   Widget build(BuildContext context) {
-    return const _CollectionManager(
+    return _CollectionManager(
+      searchQuery: searchQuery,
       title: 'Pricing Rules',
       collection: 'pricing_rules',
-      fields: ['title', 'description', 'value'],
+      fields: const ['title', 'description', 'value'],
     );
   }
 }
 
 class _AnnouncementsTab extends StatelessWidget {
-  const _AnnouncementsTab();
+  const _AnnouncementsTab({required this.searchQuery});
+
+  final ValueListenable<String> searchQuery;
 
   @override
   Widget build(BuildContext context) {
-    return const _CollectionManager(
+    return _CollectionManager(
+      searchQuery: searchQuery,
       title: 'Announcements (Ads)',
       collection: 'announcements',
-      fields: ['title', 'description'],
+      fields: const ['title', 'description'],
     );
   }
 }
 
 class _PromotionsManager extends StatelessWidget {
-  const _PromotionsManager();
+  const _PromotionsManager({required this.searchQuery});
+
+  final ValueListenable<String> searchQuery;
 
   bool _isValidWebUrl(String value) {
     final uri = Uri.tryParse(value);
@@ -130,7 +395,8 @@ class _PromotionsManager extends StatelessWidget {
           builder: (context, setState) {
             final imageUrl = imageController.text.trim();
             return AlertDialog(
-              title: Text(initialData == null ? 'Add Promotion' : 'Edit Promotion'),
+              title: Text(
+                  initialData == null ? 'Add Promotion' : 'Edit Promotion'),
               content: SizedBox(
                 width: 500,
                 child: SingleChildScrollView(
@@ -147,7 +413,8 @@ class _PromotionsManager extends StatelessWidget {
                         },
                         decoration: InputDecoration(
                           labelText: 'Promo title',
-                          errorText: showTitleError ? 'Title is required' : null,
+                          errorText:
+                              showTitleError ? 'Title is required' : null,
                           suffixIcon: showTitleError
                               ? const Icon(Icons.error_outline)
                               : null,
@@ -177,7 +444,8 @@ class _PromotionsManager extends StatelessWidget {
                         controller: imageController,
                         onChanged: (value) {
                           final trimmed = value.trim();
-                          final valid = trimmed.isNotEmpty && _isValidWebUrl(trimmed);
+                          final valid =
+                              trimmed.isNotEmpty && _isValidWebUrl(trimmed);
                           if (imageUrlErrorText != null && valid) {
                             setState(() => imageUrlErrorText = null);
                             return;
@@ -234,7 +502,9 @@ class _PromotionsManager extends StatelessWidget {
                         child: Container(
                           height: 160,
                           width: double.infinity,
-                          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerHighest,
                           child: imageUrl.isEmpty
                               ? const Center(
                                   child: Text('No image URL'),
@@ -268,7 +538,8 @@ class _PromotionsManager extends StatelessWidget {
                     final titleInvalid = title.isEmpty;
                     final descriptionInvalid = description.isEmpty;
                     final imageMissing = imageUrl.isEmpty;
-                    final imageInvalid = imageUrl.isNotEmpty && !_isValidWebUrl(imageUrl);
+                    final imageInvalid =
+                        imageUrl.isNotEmpty && !_isValidWebUrl(imageUrl);
                     final targetInvalid =
                         targetUrl.isNotEmpty && !_isValidTargetUrl(targetUrl);
 
@@ -417,137 +688,170 @@ class _PromotionsManager extends StatelessWidget {
         }
 
         final docs = snapshot.data?.docs ?? [];
+        return ValueListenableBuilder<String>(
+          valueListenable: searchQuery,
+          builder: (context, query, _) {
+            final normalizedQuery = query.trim().toLowerCase();
+            final filtered = docs.where((doc) {
+              if (normalizedQuery.isEmpty) {
+                return true;
+              }
+              final data = doc.data();
+              final pool = [
+                data['title']?.toString() ?? '',
+                data['description']?.toString() ?? '',
+                data['image']?.toString() ?? '',
+                data['url']?.toString() ?? '',
+                data['active'] == true ? 'active' : 'inactive',
+                doc.id,
+              ].join(' ').toLowerCase();
+              return pool.contains(normalizedQuery);
+            }).toList();
 
-        return Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            children: [
-              Row(
+            return Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
                 children: [
-                  Text(
-                    'Promotions',
-                    style: Theme.of(context).textTheme.headlineSmall,
+                  Row(
+                    children: [
+                      Text(
+                        'Promotions',
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                      const Spacer(),
+                      FilledButton.icon(
+                        onPressed: () => _createPromotion(context),
+                        icon: const Icon(Icons.add),
+                        label: const Text('Add'),
+                      ),
+                    ],
                   ),
-                  const Spacer(),
-                  FilledButton.icon(
-                    onPressed: () => _createPromotion(context),
-                    icon: const Icon(Icons.add),
-                    label: const Text('Add'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: docs.isEmpty
-                    ? const Center(
-                        child: Text('No promotions yet.'),
-                      )
-                    : ListView.builder(
-                        itemCount: docs.length,
-                        itemBuilder: (context, index) {
-                          final doc = docs[index];
-                          final data = doc.data();
-                          final imageUrl = data['image']?.toString() ?? '';
-                          final url = data['url']?.toString() ?? '';
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: filtered.isEmpty
+                        ? Center(
+                            child: Text(
+                              normalizedQuery.isEmpty
+                                  ? 'No promotions yet.'
+                                  : 'No promotions match "$query".',
+                            ),
+                          )
+                        : ListView.builder(
+                            itemCount: filtered.length,
+                            itemBuilder: (context, index) {
+                              final doc = filtered[index];
+                              final data = doc.data();
+                              final imageUrl = data['image']?.toString() ?? '';
+                              final url = data['url']?.toString() ?? '';
 
-                          return Card(
-                            child: Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: Container(
-                                      width: 96,
-                                      height: 96,
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .surfaceContainerHighest,
-                                      child: imageUrl.isEmpty
-                                          ? const Icon(Icons.image_outlined)
-                                          : Image.network(
-                                              imageUrl,
-                                              fit: BoxFit.cover,
-                                              errorBuilder: (_, __, ___) {
-                                                return const Icon(
-                                                  Icons.broken_image_outlined,
-                                                );
-                                              },
-                                            ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          data['title']?.toString() ?? 'Untitled',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .titleMedium,
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          data['description']?.toString() ?? '',
-                                          maxLines: 3,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        if (url.isNotEmpty) ...[
-                                          const SizedBox(height: 6),
-                                          Text(
-                                            url,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .bodySmall
-                                                ?.copyWith(
-                                                  color: Theme.of(context)
-                                                      .colorScheme
-                                                      .primary,
+                              return Card(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: Container(
+                                          width: 96,
+                                          height: 96,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .surfaceContainerHighest,
+                                          child: imageUrl.isEmpty
+                                              ? const Icon(Icons.image_outlined)
+                                              : Image.network(
+                                                  imageUrl,
+                                                  fit: BoxFit.cover,
+                                                  errorBuilder: (_, __, ___) {
+                                                    return const Icon(
+                                                      Icons
+                                                          .broken_image_outlined,
+                                                    );
+                                                  },
                                                 ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              data['title']?.toString() ??
+                                                  'Untitled',
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .titleMedium,
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              data['description']?.toString() ??
+                                                  '',
+                                              maxLines: 3,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            if (url.isNotEmpty) ...[
+                                              const SizedBox(height: 6),
+                                              Text(
+                                                url,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .bodySmall
+                                                    ?.copyWith(
+                                                      color: Theme.of(context)
+                                                          .colorScheme
+                                                          .primary,
+                                                    ),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Column(
+                                        children: [
+                                          Switch(
+                                            value: data['active'] == true,
+                                            onChanged: (value) async {
+                                              await doc.reference.set({
+                                                'active': value,
+                                                'updatedAt': FieldValue
+                                                    .serverTimestamp(),
+                                              }, SetOptions(merge: true));
+                                            },
+                                          ),
+                                          IconButton(
+                                            tooltip: 'Edit',
+                                            onPressed: () =>
+                                                _editPromotion(context, doc),
+                                            icon:
+                                                const Icon(Icons.edit_outlined),
+                                          ),
+                                          IconButton(
+                                            tooltip: 'Delete',
+                                            onPressed: () =>
+                                                _deletePromotion(context, doc),
+                                            icon: const Icon(
+                                                Icons.delete_outline),
                                           ),
                                         ],
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Column(
-                                    children: [
-                                      Switch(
-                                        value: data['active'] == true,
-                                        onChanged: (value) async {
-                                          await doc.reference.set({
-                                            'active': value,
-                                            'updatedAt':
-                                                FieldValue.serverTimestamp(),
-                                          }, SetOptions(merge: true));
-                                        },
-                                      ),
-                                      IconButton(
-                                        tooltip: 'Edit',
-                                        onPressed: () => _editPromotion(context, doc),
-                                        icon: const Icon(Icons.edit_outlined),
-                                      ),
-                                      IconButton(
-                                        tooltip: 'Delete',
-                                        onPressed: () =>
-                                            _deletePromotion(context, doc),
-                                        icon: const Icon(Icons.delete_outline),
                                       ),
                                     ],
                                   ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            );
+          },
         );
       },
     );
@@ -572,11 +876,13 @@ class _PromotionFormData {
 
 class _CollectionManager extends StatelessWidget {
   const _CollectionManager({
+    required this.searchQuery,
     required this.title,
     required this.collection,
     required this.fields,
   });
 
+  final ValueListenable<String> searchQuery;
   final String title;
   final String collection;
   final List<String> fields;
@@ -605,9 +911,10 @@ class _CollectionManager extends StatelessWidget {
                           padding: const EdgeInsets.only(bottom: 10),
                           child: TextField(
                             controller: controllers[field],
-                            keyboardType: field.toLowerCase().contains('percent')
-                                ? TextInputType.number
-                                : TextInputType.text,
+                            keyboardType:
+                                field.toLowerCase().contains('percent')
+                                    ? TextInputType.number
+                                    : TextInputType.text,
                             decoration: InputDecoration(
                               labelText: field,
                             ),
@@ -647,8 +954,7 @@ class _CollectionManager extends StatelessWidget {
     }
 
     final payload = <String, dynamic>{
-      for (final field in fields)
-        field: controllers[field]!.text.trim(),
+      for (final field in fields) field: controllers[field]!.text.trim(),
       'active': active,
       'updatedAt': FieldValue.serverTimestamp(),
       'createdAt': FieldValue.serverTimestamp(),
@@ -681,56 +987,82 @@ class _CollectionManager extends StatelessWidget {
         }
         final docs = snapshot.data?.docs ?? [];
 
-        return Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            children: [
-              Row(
+        return ValueListenableBuilder<String>(
+          valueListenable: searchQuery,
+          builder: (context, query, _) {
+            final normalizedQuery = query.trim().toLowerCase();
+            final filtered = docs.where((doc) {
+              if (normalizedQuery.isEmpty) {
+                return true;
+              }
+              final data = doc.data();
+              final pool = [
+                for (final field in fields) data[field]?.toString() ?? '',
+                data['active'] == true ? 'active' : 'inactive',
+                doc.id,
+              ].join(' ').toLowerCase();
+              return pool.contains(normalizedQuery);
+            }).toList();
+
+            return Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
                 children: [
-                  Text(title, style: Theme.of(context).textTheme.headlineSmall),
-                  const Spacer(),
-                  FilledButton.icon(
-                    onPressed: () => _showCreateDialog(context),
-                    icon: const Icon(Icons.add),
-                    label: const Text('Add'),
+                  Row(
+                    children: [
+                      Text(title,
+                          style: Theme.of(context).textTheme.headlineSmall),
+                      const Spacer(),
+                      FilledButton.icon(
+                        onPressed: () => _showCreateDialog(context),
+                        icon: const Icon(Icons.add),
+                        label: const Text('Add'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: filtered.isEmpty
+                        ? Center(
+                            child: Text(
+                              normalizedQuery.isEmpty
+                                  ? 'No $title entries yet.'
+                                  : 'No $title entries match "$query".',
+                            ),
+                          )
+                        : ListView.builder(
+                            itemCount: filtered.length,
+                            itemBuilder: (context, index) {
+                              final doc = filtered[index];
+                              final data = doc.data();
+                              return Card(
+                                child: ListTile(
+                                  title: Text(
+                                      data['title']?.toString() ?? 'Untitled'),
+                                  subtitle: Text(
+                                    data['description']?.toString() ?? '',
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  trailing: Switch(
+                                    value: data['active'] == true,
+                                    onChanged: (value) async {
+                                      await doc.reference.set({
+                                        'active': value,
+                                        'updatedAt':
+                                            FieldValue.serverTimestamp(),
+                                      }, SetOptions(merge: true));
+                                    },
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: docs.isEmpty
-                    ? Center(
-                        child: Text('No $title entries yet.'),
-                      )
-                    : ListView.builder(
-                        itemCount: docs.length,
-                        itemBuilder: (context, index) {
-                          final doc = docs[index];
-                          final data = doc.data();
-                          return Card(
-                            child: ListTile(
-                              title: Text(data['title']?.toString() ?? 'Untitled'),
-                              subtitle: Text(
-                                data['description']?.toString() ?? '',
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              trailing: Switch(
-                                value: data['active'] == true,
-                                onChanged: (value) async {
-                                  await doc.reference.set({
-                                    'active': value,
-                                    'updatedAt': FieldValue.serverTimestamp(),
-                                  }, SetOptions(merge: true));
-                                },
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-              ),
-            ],
-          ),
+            );
+          },
         );
       },
     );

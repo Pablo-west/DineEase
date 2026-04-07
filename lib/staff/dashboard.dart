@@ -46,6 +46,11 @@ class _DashboardBodyState extends State<DashboardBody> {
                 padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
                 child: DropdownButton<String>(
                   value: filterMode,
+                  dropdownColor: Colors.white,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                  iconEnabledColor: Theme.of(context).colorScheme.onSurface,
                   onChanged: (String? newValue) {
                     setState(() {
                       filterMode = newValue!;

@@ -26,6 +26,7 @@ class AdminApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: scheme,
         scaffoldBackgroundColor: scheme.surface,
+        canvasColor: scheme.surface,
         useMaterial3: true,
         textTheme: GoogleFonts.dmSansTextTheme().apply(
           bodyColor: scheme.onSurface,

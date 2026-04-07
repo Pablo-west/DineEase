@@ -500,6 +500,7 @@ class _PlaceOdrerState extends State<PlaceOdrer> {
         child: DropdownButtonHideUnderline(
           child: DropdownButtonFormField<String>(
             initialValue: dropdownValue,
+            dropdownColor: Colors.white,
             icon: const Icon(
               Icons.arrow_drop_down_rounded,
               color: Colors.black,

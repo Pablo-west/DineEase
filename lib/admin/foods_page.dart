@@ -1,9 +1,15 @@
+// ignore_for_file: avoid_types_as_parameter_names
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:dine_ease/admin/admin_ui.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'loading_skeleton.dart';
 import 'vendors_page.dart';
+
+const String _popularFoodType = 'popularFood';
+const String _deliciousFoodType = 'deliciousFoods';
 
 class FoodsPage extends StatefulWidget {
   const FoodsPage({super.key, required this.searchQuery});
@@ -16,7 +22,6 @@ class FoodsPage extends StatefulWidget {
 
 class _FoodsPageState extends State<FoodsPage> {
   late final Stream<QuerySnapshot<Map<String, dynamic>>> _foodsStream;
-  late final Stream<QuerySnapshot<Map<String, dynamic>>> _categoriesStream;
   late final Stream<QuerySnapshot<Map<String, dynamic>>> _vendorsStream;
 
   @override
@@ -26,10 +31,10 @@ class _FoodsPageState extends State<FoodsPage> {
         .collection('foods')
         .orderBy('title')
         .snapshots();
-    _categoriesStream =
-        FirebaseFirestore.instance.collection('food_categories').snapshots();
-    _vendorsStream =
-        FirebaseFirestore.instance.collection('vendors').orderBy('name').snapshots();
+    _vendorsStream = FirebaseFirestore.instance
+        .collection('vendors')
+        .orderBy('name')
+        .snapshots();
   }
 
   @override
@@ -73,11 +78,24 @@ class _FoodsPageState extends State<FoodsPage> {
                   final data = doc.data();
                   final title = data['title']?.toString() ?? '';
                   final category = data['category']?.toString() ?? '';
+                  final description = data['description']?.toString() ?? '';
+                  final subtitle = data['subtitle']?.toString() ?? '';
+                  final ingredients = (data['ingredients'] as List?)
+                          ?.map((value) => value?.toString() ?? '')
+                          .join(' ') ??
+                      '';
+                  final foodType = (data['foodType'] as List?)
+                          ?.map((value) => value?.toString() ?? '')
+                          .join(' ') ??
+                      '';
+                  final price = data['price']?.toString() ?? '';
+                  final calories = data['calories']?.toString() ?? '';
                   final vendorName = _resolveVendorName(data, vendorMap);
                   if (normalizedQuery.isEmpty) {
                     return true;
                   }
-                  return ('$title $category $vendorName')
+                  return ('$title $subtitle $description $category $vendorName '
+                          '$ingredients $foodType $price $calories')
                       .toLowerCase()
                       .contains(normalizedQuery);
                 }).toList();
@@ -85,112 +103,380 @@ class _FoodsPageState extends State<FoodsPage> {
                 final vendorCounts = <String, int>{};
                 for (final doc in filtered) {
                   final vendorName = _resolveVendorName(doc.data(), vendorMap);
-                  vendorCounts[vendorName] = (vendorCounts[vendorName] ?? 0) + 1;
+                  vendorCounts[vendorName] =
+                      (vendorCounts[vendorName] ?? 0) + 1;
                 }
 
-                return Padding(
+                final categoryCounts = <String, int>{};
+                final priceValues = <double>[];
+                final ratingValues = <double>[];
+                final foodTypeCounts = <String, int>{
+                  _popularFoodType: 0,
+                  _deliciousFoodType: 0,
+                };
+
+                for (final doc in filtered) {
+                  final data = doc.data();
+                  final category = (data['category']?.toString() ?? '').trim();
+                  if (category.isNotEmpty) {
+                    categoryCounts[category] =
+                        (categoryCounts[category] ?? 0) + 1;
+                  }
+                  final price = _readDouble(data['price']);
+                  if (price > 0) {
+                    priceValues.add(price);
+                  }
+                  final rating = _readDouble(data['rating']);
+                  if (rating > 0) {
+                    ratingValues.add(rating);
+                  }
+                  final foodTypes =
+                      (data['foodType'] as List?)?.cast<dynamic>() ?? const [];
+                  if (foodTypes
+                      .any((value) => value?.toString() == _popularFoodType)) {
+                    foodTypeCounts[_popularFoodType] =
+                        foodTypeCounts[_popularFoodType]! + 1;
+                  }
+                  if (foodTypes.any(
+                      (value) => value?.toString() == _deliciousFoodType)) {
+                    foodTypeCounts[_deliciousFoodType] =
+                        foodTypeCounts[_deliciousFoodType]! + 1;
+                  }
+                }
+
+                final avgPrice = priceValues.isEmpty
+                    ? 0.0
+                    : priceValues.fold<double>(0, (sum, value) => sum + value) /
+                        priceValues.length;
+                final avgRating = ratingValues.isEmpty
+                    ? 0.0
+                    : ratingValues.fold<double>(
+                            0, (sum, value) => sum + value) /
+                        ratingValues.length;
+                final topCategories = categoryCounts.entries.toList()
+                  ..sort((a, b) => b.value.compareTo(a.value));
+                final topVendors = vendorCounts.entries.toList()
+                  ..sort((a, b) => b.value.compareTo(a.value));
+
+                return SingleChildScrollView(
                   padding: const EdgeInsets.all(20),
-                  child: Column(
-                    children: [
-                      Wrap(
-                        spacing: 12,
-                        runSpacing: 10,
-                        crossAxisAlignment: WrapCrossAlignment.center,
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1440),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'Foods',
-                            style: Theme.of(context).textTheme.headlineSmall,
+                          AdminPageIntro(
+                            icon: Icons.restaurant_menu_outlined,
+                            title: 'Foods Catalog',
+                            subtitle:
+                                'Organize menu items, categories, and vendor assignments from one catalog studio.',
+                            trailing: Wrap(
+                              spacing: 10,
+                              runSpacing: 10,
+                              alignment: WrapAlignment.end,
+                              children: [
+                                FilledButton.icon(
+                                  onPressed: () async {
+                                    await showDialog(
+                                      context: context,
+                                      builder: (context) =>
+                                          const FoodFormDialog(),
+                                    );
+                                  },
+                                  icon: const Icon(Icons.add),
+                                  label: const Text('Add Food'),
+                                ),
+                                FilledButton.icon(
+                                  onPressed: () async {
+                                    await showDialog(
+                                      context: context,
+                                      builder: (context) =>
+                                          const VendorFormDialog(),
+                                    );
+                                  },
+                                  icon: const Icon(Icons.storefront_outlined),
+                                  label: const Text('Add Vendor'),
+                                ),
+                              ],
+                            ),
+                            badges: [
+                              AdminBadge(
+                                icon: Icons.restaurant_menu_outlined,
+                                label: '${filtered.length} foods in view',
+                              ),
+                              AdminBadge(
+                                icon: Icons.storefront_outlined,
+                                label: '${vendorDocs.length} vendors',
+                              ),
+                              AdminBadge(
+                                icon: Icons.category_outlined,
+                                label: 'Menu catalog',
+                              ),
+                            ],
                           ),
-                          _CountPill(count: filtered.length, label: 'foods'),
-                          _CountPill(count: vendorDocs.length, label: 'vendors'),
-                          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                            stream: _categoriesStream,
-                            builder: (context, snapshot) {
-                              final docs = snapshot.data?.docs ?? [];
-                              final unique = <String>{};
-                              for (final doc in docs) {
-                                final data = doc.data();
-                                final name = (data['name'] ?? data['label'] ?? '')
-                                    .toString()
-                                    .trim();
-                                if (name.isNotEmpty) {
-                                  unique.add(name.toLowerCase());
-                                }
+                          const SizedBox(height: 14),
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 12,
+                            children: [
+                              _MetricCard(
+                                title: 'Foods',
+                                value: filtered.length.toString(),
+                                icon: Icons.restaurant_menu_outlined,
+                              ),
+                              _MetricCard(
+                                title: 'Vendors',
+                                value: vendorDocs.length.toString(),
+                                icon: Icons.storefront_outlined,
+                              ),
+                              _MetricCard(
+                                title: 'Categories',
+                                value: topCategories.length.toString(),
+                                icon: Icons.category_outlined,
+                              ),
+                              _MetricCard(
+                                title: 'Avg Price',
+                                value: 'GHS ${avgPrice.toStringAsFixed(2)}',
+                                icon: Icons.payments_outlined,
+                              ),
+                              _MetricCard(
+                                title: 'Avg Rating',
+                                value: avgRating == 0
+                                    ? 'Unrated'
+                                    : avgRating.toStringAsFixed(1),
+                                icon: Icons.star_outline,
+                              ),
+                              _MetricCard(
+                                title: 'Food Types',
+                                value:
+                                    '${foodTypeCounts[_popularFoodType]! + foodTypeCounts[_deliciousFoodType]!}',
+                                icon: Icons.auto_awesome_outlined,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+                          _FoodHintBar(
+                            total: filtered.length,
+                            vendorCounts: vendorCounts,
+                          ),
+                          const SizedBox(height: 14),
+                          LayoutBuilder(
+                            builder: (context, constraints) {
+                              final wide = constraints.maxWidth >= 1120;
+                              final libraryCard = AdminSectionCard(
+                                title: 'Food Library',
+                                subtitle:
+                                    'Browse, edit, and delete menu items without losing the bigger picture.',
+                                child: filtered.isEmpty
+                                    ? const AdminEmptyState(
+                                        icon: Icons.restaurant_menu_outlined,
+                                        title: 'No foods found',
+                                        message:
+                                            'Try a different search term or add a new menu item to the catalog.',
+                                      )
+                                    : GridView.builder(
+                                        shrinkWrap: true,
+                                        physics:
+                                            const NeverScrollableScrollPhysics(),
+                                        gridDelegate:
+                                            const SliverGridDelegateWithMaxCrossAxisExtent(
+                                          maxCrossAxisExtent: 320,
+                                          childAspectRatio: 0.88,
+                                          crossAxisSpacing: 14,
+                                          mainAxisSpacing: 14,
+                                        ),
+                                        itemCount: filtered.length,
+                                        itemBuilder: (context, index) {
+                                          final doc = filtered[index];
+                                          return _FoodCard(
+                                            doc: doc,
+                                            vendorName: _resolveVendorName(
+                                              doc.data(),
+                                              vendorMap,
+                                            ),
+                                          );
+                                        },
+                                      ),
+                              );
+
+                              final categoryCard = AdminSectionCard(
+                                title: 'Category Mix',
+                                subtitle:
+                                    'Which menu groups currently dominate the catalog.',
+                                child: topCategories.isEmpty
+                                    ? const Text('No category data yet.')
+                                    : Column(
+                                        children:
+                                            topCategories.take(6).map((entry) {
+                                          return Padding(
+                                            padding: const EdgeInsets.only(
+                                                bottom: 10),
+                                            child: _StatRow(
+                                              label: entry.key,
+                                              value: entry.value,
+                                              total: filtered.isEmpty
+                                                  ? 1
+                                                  : filtered.length,
+                                              color: Colors.deepPurple,
+                                            ),
+                                          );
+                                        }).toList(),
+                                      ),
+                              );
+
+                              final vendorCard = AdminSectionCard(
+                                title: 'Vendor Load',
+                                subtitle:
+                                    'See which vendors own the most items in the current slice.',
+                                child: topVendors.isEmpty
+                                    ? const Text('No vendor data yet.')
+                                    : Column(
+                                        children:
+                                            topVendors.take(6).map((entry) {
+                                          return Padding(
+                                            padding: const EdgeInsets.only(
+                                                bottom: 10),
+                                            child: _StatRow(
+                                              label: entry.key,
+                                              value: entry.value,
+                                              total: filtered.isEmpty
+                                                  ? 1
+                                                  : filtered.length,
+                                              color: Colors.blue,
+                                            ),
+                                          );
+                                        }).toList(),
+                                      ),
+                              );
+
+                              final healthCard = AdminSectionCard(
+                                title: 'Catalog Health',
+                                subtitle:
+                                    'A quick snapshot of pricing, ratings, and item mix.',
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _MiniStat(
+                                      label: 'Avg price',
+                                      value:
+                                          'GHS ${avgPrice.toStringAsFixed(2)}',
+                                    ),
+                                    const SizedBox(height: 10),
+                                    _MiniStat(
+                                      label: 'Avg rating',
+                                      value: avgRating == 0
+                                          ? 'Unrated'
+                                          : avgRating.toStringAsFixed(1),
+                                    ),
+                                    const SizedBox(height: 10),
+                                    _MiniStat(
+                                      label: 'Popular foods',
+                                      value: foodTypeCounts[_popularFoodType]!
+                                          .toString(),
+                                    ),
+                                    const SizedBox(height: 10),
+                                    _MiniStat(
+                                      label: 'Delicious foods',
+                                      value: foodTypeCounts[_deliciousFoodType]!
+                                          .toString(),
+                                    ),
+                                  ],
+                                ),
+                              );
+
+                              final actionsCard = AdminSectionCard(
+                                title: 'Quick Actions',
+                                subtitle:
+                                    'The most common menu maintenance tasks.',
+                                child: Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    OutlinedButton.icon(
+                                      onPressed: () async {
+                                        await showDialog(
+                                          context: context,
+                                          builder: (context) =>
+                                              const VendorFormDialog(),
+                                        );
+                                      },
+                                      icon:
+                                          const Icon(Icons.storefront_outlined),
+                                      label: const Text('Add Vendor'),
+                                    ),
+                                    OutlinedButton.icon(
+                                      onPressed: () async {
+                                        await showDialog(
+                                          context: context,
+                                          builder: (context) =>
+                                              const _CategoryManagerDialog(),
+                                        );
+                                      },
+                                      icon: const Icon(Icons.category_outlined),
+                                      label: const Text('Manage Categories'),
+                                    ),
+                                    OutlinedButton.icon(
+                                      onPressed: () async {
+                                        await showDialog(
+                                          context: context,
+                                          builder: (context) =>
+                                              const FoodFormDialog(),
+                                        );
+                                      },
+                                      icon: const Icon(Icons.add),
+                                      label: const Text('New Food'),
+                                    ),
+                                  ],
+                                ),
+                              );
+
+                              if (wide) {
+                                return Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      flex: 2,
+                                      child: libraryCard,
+                                    ),
+                                    const SizedBox(width: 14),
+                                    SizedBox(
+                                      width: 380,
+                                      child: Column(
+                                        children: [
+                                          categoryCard,
+                                          const SizedBox(height: 14),
+                                          vendorCard,
+                                          const SizedBox(height: 14),
+                                          healthCard,
+                                          const SizedBox(height: 14),
+                                          actionsCard,
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                );
                               }
-                              return _CountPill(
-                                count: unique.length,
-                                label: 'categories',
+
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  categoryCard,
+                                  const SizedBox(height: 14),
+                                  vendorCard,
+                                  const SizedBox(height: 14),
+                                  healthCard,
+                                  const SizedBox(height: 14),
+                                  actionsCard,
+                                  const SizedBox(height: 14),
+                                  libraryCard,
+                                ],
                               );
                             },
-                          ),
-                          FilledButton.icon(
-                            onPressed: () async {
-                              await showDialog(
-                                context: context,
-                                builder: (context) => const FoodFormDialog(),
-                              );
-                            },
-                            icon: const Icon(Icons.add),
-                            label: const Text('Add Food'),
-                          ),
-                          OutlinedButton.icon(
-                            onPressed: () async {
-                              await showDialog(
-                                context: context,
-                                builder: (context) => const VendorFormDialog(),
-                              );
-                            },
-                            icon: const Icon(Icons.storefront_outlined),
-                            label: const Text('Add Vendor'),
-                          ),
-                          OutlinedButton.icon(
-                            onPressed: () async {
-                              await showDialog(
-                                context: context,
-                                builder: (context) =>
-                                    const _CategoryManagerDialog(),
-                              );
-                            },
-                            icon: const Icon(Icons.category_outlined),
-                            label: const Text('Add / Modify Categories'),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 14),
-                      _FoodHintBar(
-                        total: filtered.length,
-                        vendorCounts: vendorCounts,
-                      ),
-                      Expanded(
-                        child: filtered.isEmpty
-                            ? Center(
-                                child: Text(
-                                  'No foods found.',
-                                  style: Theme.of(context).textTheme.bodyLarge,
-                                ),
-                              )
-                            : GridView.builder(
-                                gridDelegate:
-                                    const SliverGridDelegateWithMaxCrossAxisExtent(
-                                  maxCrossAxisExtent: 300,
-                                  childAspectRatio: 0.9,
-                                  crossAxisSpacing: 14,
-                                  mainAxisSpacing: 14,
-                                ),
-                                itemCount: filtered.length,
-                                itemBuilder: (context, index) {
-                                  final doc = filtered[index];
-                                  return _FoodCard(
-                                    doc: doc,
-                                    vendorName: _resolveVendorName(
-                                      doc.data(),
-                                      vendorMap,
-                                    ),
-                                  );
-                                },
-                              ),
-                      ),
-                    ],
+                    ),
                   ),
                 );
               },
@@ -406,30 +692,30 @@ class _FoodCard extends StatelessWidget {
   }
 }
 
-class _CountPill extends StatelessWidget {
-  const _CountPill({required this.count, this.label = 'items'});
+// class _CountPill extends StatelessWidget {
+//   const _CountPill({required this.count, this.label = 'items'});
 
-  final int count;
-  final String label;
+//   final int count;
+//   final String label;
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        '$count $label',
-        style: Theme.of(context)
-            .textTheme
-            .labelMedium
-            ?.copyWith(color: Theme.of(context).colorScheme.primary),
-      ),
-    );
-  }
-}
+//   @override
+//   Widget build(BuildContext context) {
+//     return Container(
+//       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+//       decoration: BoxDecoration(
+//         color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+//         borderRadius: BorderRadius.circular(20),
+//       ),
+//       child: Text(
+//         '$count $label',
+//         style: Theme.of(context)
+//             .textTheme
+//             .labelMedium
+//             ?.copyWith(color: Theme.of(context).colorScheme.primary),
+//       ),
+//     );
+//   }
+// }
 
 class _FoodsPageSkeleton extends StatelessWidget {
   const _FoodsPageSkeleton();
@@ -501,6 +787,165 @@ class _FoodHintBar extends StatelessWidget {
           Text(
             'Vendors: ${vendorCounts.length} | Foods: $total',
             style: Theme.of(context).textTheme.labelMedium,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MetricCard extends StatelessWidget {
+  const _MetricCard({
+    required this.title,
+    required this.value,
+    required this.icon,
+  });
+
+  final String title;
+  final String value;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return SizedBox(
+      width: 210,
+      child: Card(
+        elevation: 0,
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side:
+              BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.45)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: scheme.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(icon, size: 18, color: scheme.primary),
+              ),
+              const SizedBox(height: 10),
+              Text(title, style: Theme.of(context).textTheme.labelMedium),
+              const SizedBox(height: 4),
+              Text(
+                value,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StatRow extends StatelessWidget {
+  const _StatRow({
+    required this.label,
+    required this.value,
+    required this.total,
+    required this.color,
+  });
+
+  final String label;
+  final int value;
+  final int total;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final ratio = total <= 0 ? 0.0 : (value / total).clamp(0.0, 1.0);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              value.toString(),
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: Colors.black54,
+                  ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(999),
+          child: LinearProgressIndicator(
+            value: ratio,
+            minHeight: 8,
+            backgroundColor: color.withValues(alpha: 0.12),
+            valueColor: AlwaysStoppedAnimation<Color>(color),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MiniStat extends StatelessWidget {
+  const _MiniStat({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.03),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.black12),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Colors.black54,
+                  ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            value,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
           ),
         ],
       ),
@@ -1195,14 +1640,30 @@ class _FoodFormDialogState extends State<FoodFormDialog> {
                                       child: Builder(
                                         builder: (context) {
                                           final selectedVendorId =
-                                              _vendorController.text.trim().isEmpty
+                                              _vendorController.text
+                                                      .trim()
+                                                      .isEmpty
                                                   ? null
-                                                  : _vendorController.text.trim();
-                                          return DropdownButtonFormField<String>(
+                                                  : _vendorController.text
+                                                      .trim();
+                                          return DropdownButtonFormField<
+                                              String>(
                                             key: ValueKey(
                                               'vendor-$selectedVendorId-${_vendorOptions.length}',
                                             ),
                                             initialValue: selectedVendorId,
+                                            dropdownColor: Colors.white,
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodyMedium
+                                                ?.copyWith(
+                                                  color: Theme.of(context)
+                                                      .colorScheme
+                                                      .onSurface,
+                                                ),
+                                            iconEnabledColor: Theme.of(context)
+                                                .colorScheme
+                                                .onSurface,
                                             decoration: InputDecoration(
                                               labelText: 'Vendor',
                                               helperText: _loadingVendors
@@ -1277,6 +1738,18 @@ class _FoodFormDialogState extends State<FoodFormDialog> {
                                               'category-$selected-${optionList.length}',
                                             ),
                                             initialValue: selected,
+                                            dropdownColor: Colors.white,
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodyMedium
+                                                ?.copyWith(
+                                                  color: Theme.of(context)
+                                                      .colorScheme
+                                                      .onSurface,
+                                                ),
+                                            iconEnabledColor: Theme.of(context)
+                                                .colorScheme
+                                                .onSurface,
                                             decoration: InputDecoration(
                                               labelText: 'Category',
                                               helperText: _loadingCategories
@@ -1683,4 +2156,11 @@ class _VendorOption {
   final String id;
   final String name;
   final bool isActive;
+}
+
+double _readDouble(Object? value) {
+  if (value is num) {
+    return value.toDouble();
+  }
+  return double.tryParse(value?.toString() ?? '') ?? 0;
 }

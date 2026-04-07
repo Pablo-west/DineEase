@@ -2,17 +2,35 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import 'admin_ui.dart';
 import 'loading_skeleton.dart';
 
-class CrmPage extends StatelessWidget {
+class CrmPage extends StatefulWidget {
   const CrmPage({super.key, required this.searchQuery});
 
   final ValueListenable<String> searchQuery;
 
   @override
+  State<CrmPage> createState() => _CrmPageState();
+}
+
+class _CrmPageState extends State<CrmPage> {
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _ordersStream;
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _usersStream;
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _customersStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _ordersStream = FirebaseFirestore.instance.collection('orders').snapshots();
+    _usersStream = FirebaseFirestore.instance.collection('users').snapshots();
+    _customersStream = FirebaseFirestore.instance.collection('customers').snapshots();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance.collection('orders').snapshots(),
+      stream: _ordersStream,
       builder: (context, ordersSnap) {
         if (ordersSnap.connectionState == ConnectionState.waiting) {
           return const _CrmSkeleton();
@@ -21,7 +39,7 @@ class CrmPage extends StatelessWidget {
           return _CrmPermissionDenied(error: ordersSnap.error);
         }
         return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: FirebaseFirestore.instance.collection('users').snapshots(),
+          stream: _usersStream,
           builder: (context, usersSnap) {
             if (usersSnap.connectionState == ConnectionState.waiting) {
               return const _CrmSkeleton();
@@ -30,9 +48,7 @@ class CrmPage extends StatelessWidget {
               return _CrmPermissionDenied(error: usersSnap.error);
             }
             return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: FirebaseFirestore.instance
-                  .collection('customers')
-                  .snapshots(),
+              stream: _customersStream,
               builder: (context, customerSnap) {
                 if (customerSnap.connectionState == ConnectionState.waiting) {
                   return const _CrmSkeleton();
@@ -51,7 +67,7 @@ class CrmPage extends StatelessWidget {
                 );
 
                 return ValueListenableBuilder<String>(
-                  valueListenable: searchQuery,
+                  valueListenable: widget.searchQuery,
                   builder: (context, query, _) {
                     final normalized = query.trim().toLowerCase();
                     final filtered = customers.where((customer) {
@@ -71,38 +87,83 @@ class CrmPage extends StatelessWidget {
                     final vipCount = filtered
                         .where((customer) => customer.segment == 'VIP')
                         .length;
+                    final returningCount = filtered
+                        .where((customer) => customer.segment == 'Returning')
+                        .length;
+                    final newCount = filtered
+                        .where((customer) => customer.segment == 'New')
+                        .length;
+                    final customersWithNotes = filtered
+                        .where((customer) =>
+                            customer.notesCount > 0 || customer.note.isNotEmpty)
+                        .length;
+                    final avgSpend =
+                        filtered.isEmpty ? 0.0 : totalSpend / filtered.length;
+                    final segmentCounts = <String, int>{
+                      'VIP': vipCount,
+                      'Returning': returningCount,
+                      'New': newCount,
+                    };
+                    final topCustomers = [...filtered]
+                      ..sort((a, b) => b.spend.compareTo(a.spend));
+                    final noteCustomers = [...filtered]
+                      ..sort((a, b) => b.notesCount.compareTo(a.notesCount));
+                    final noteHighlights = noteCustomers
+                        .where(
+                          (customer) =>
+                              customer.note.trim().isNotEmpty ||
+                              customer.notesCount > 0,
+                        )
+                        .take(5)
+                        .toList();
                     final colorScheme = Theme.of(context).colorScheme;
 
-                    return Padding(
+                    return SingleChildScrollView(
                       padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
                       child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Container(
                             width: double.infinity,
-                            padding: const EdgeInsets.all(18),
+                            padding: const EdgeInsets.all(20),
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
                                 colors: [
-                                  colorScheme.primary.withValues(alpha: 0.14),
-                                  colorScheme.tertiary.withValues(alpha: 0.08),
+                                  colorScheme.primary.withValues(alpha: 0.16),
+                                  colorScheme.tertiary.withValues(alpha: 0.09),
                                 ],
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
                               ),
-                              borderRadius: BorderRadius.circular(18),
+                              borderRadius: BorderRadius.circular(22),
                               border: Border.all(
                                 color:
                                     colorScheme.primary.withValues(alpha: 0.15),
                               ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.04),
+                                  blurRadius: 24,
+                                  offset: const Offset(0, 10),
+                                ),
+                              ],
                             ),
                             child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Icon(
-                                  Icons.people_alt_outlined,
-                                  color: colorScheme.primary,
-                                  size: 26,
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.7),
+                                    borderRadius: BorderRadius.circular(18),
+                                  ),
+                                  child: Icon(
+                                    Icons.people_alt_outlined,
+                                    color: colorScheme.primary,
+                                    size: 28,
+                                  ),
                                 ),
-                                const SizedBox(width: 10),
+                                const SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment:
@@ -123,87 +184,308 @@ class CrmPage extends StatelessWidget {
                                             .textTheme
                                             .bodyMedium,
                                       ),
+                                      const SizedBox(height: 10),
+                                      Text(
+                                        'Search the top bar for names, phones, notes, segments, or spend. The page now surfaces customers, order history, and note activity in one control center.',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                              color: colorScheme.onSurfaceVariant,
+                                            ),
+                                      ),
                                     ],
                                   ),
                                 ),
-                                _Badge(text: '${filtered.length} customers'),
+                                const SizedBox(width: 12),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    _Badge(text: '${filtered.length} customers'),
+                                    const SizedBox(height: 8),
+                                    _Badge(
+                                      text: '$customersWithNotes with notes',
+                                      tone: Colors.indigo,
+                                    ),
+                                  ],
+                                ),
                               ],
                             ),
                           ),
                           const SizedBox(height: 12),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _StatTile(
+                          LayoutBuilder(
+                            builder: (context, statConstraints) {
+                              final wideStats = statConstraints.maxWidth >= 980;
+                              final statTiles = [
+                                _StatTile(
                                   icon: Icons.receipt_long_outlined,
                                   label: 'Orders',
                                   value: '$totalOrders',
                                 ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: _StatTile(
+                                _StatTile(
                                   icon: Icons.payments_outlined,
                                   label: 'Revenue',
                                   value: 'GHS ${totalSpend.toStringAsFixed(2)}',
                                 ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: _StatTile(
+                                _StatTile(
                                   icon: Icons.workspace_premium_outlined,
                                   label: 'VIPs',
                                   value: '$vipCount',
                                 ),
-                              ),
-                            ],
+                                _StatTile(
+                                  icon: Icons.group_outlined,
+                                  label: 'Returning',
+                                  value: '$returningCount',
+                                ),
+                                _StatTile(
+                                  icon: Icons.verified_user_outlined,
+                                  label: 'Average Spend',
+                                  value: 'GHS ${avgSpend.toStringAsFixed(2)}',
+                                ),
+                              ];
+
+                              if (wideStats) {
+                                return Row(
+                                  children: [
+                                    for (var i = 0; i < statTiles.length; i++) ...[
+                                      Expanded(child: statTiles[i]),
+                                      if (i != statTiles.length - 1)
+                                        const SizedBox(width: 12),
+                                    ],
+                                  ],
+                                );
+                              }
+
+                              return SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: Row(
+                                  children: [
+                                    for (var i = 0; i < statTiles.length; i++) ...[
+                                      SizedBox(width: 210, child: statTiles[i]),
+                                      if (i != statTiles.length - 1)
+                                        const SizedBox(width: 12),
+                                    ],
+                                  ],
+                                ),
+                              );
+                            },
                           ),
                           const SizedBox(height: 12),
-                          Expanded(
-                            child: filtered.isEmpty
-                                ? const Center(
-                                    child: Text('No customers found.'))
-                                : LayoutBuilder(
-                                    builder: (context, constraints) {
-                                      final width = constraints.maxWidth;
-                                      var columns = 1;
-                                      if (width >= 1200) {
-                                        columns = 4;
-                                      } else if (width >= 900) {
-                                        columns = 3;
-                                      } else if (width >= 620) {
-                                        columns = 2;
-                                      }
-                                      final childAspectRatio = switch (columns) {
-                                        4 => 1.45,
-                                        3 => 1.55,
-                                        2 => 1.8,
-                                        _ => 2.2,
-                                      };
+                          LayoutBuilder(
+                            builder: (context, constraints) {
+                              final wide = constraints.maxWidth >= 1120;
+                              final availableHeight = MediaQuery.of(context).size.height - 220;
+                              final directoryGridHeight = wide
+                                  ? (availableHeight * 0.72).clamp(420.0, 900.0)
+                                  : (availableHeight * 0.50).clamp(360.0, 720.0);
+                              final insightsHeight = wide
+                                  ? availableHeight
+                                  : (availableHeight * 0.42).clamp(300.0, 520.0);
+                              final directoryPaneHeight = directoryGridHeight + 140;
+                              final directoryPane = Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    AdminSectionCard(
+                                      title: 'Customer Directory',
+                                      subtitle:
+                                          'Search by name, phone, segment, notes, or customer spend.',
+                                      action: _Badge(
+                                        text: normalized.isEmpty
+                                            ? 'All customers'
+                                            : 'Filtered',
+                                        tone: colorScheme.primary,
+                                      ),
+                                      child: filtered.isEmpty
+                                          ? const AdminEmptyState(
+                                              icon: Icons.people_outline,
+                                              title: 'No customers found',
+                                              message:
+                                                  'Try a different search term or clear the top search bar.',
+                                            )
+                                          : LayoutBuilder(
+                                              builder: (context, gridConstraints) {
+                                                final width =
+                                                    gridConstraints.maxWidth;
+                                                var columns = 1;
+                                                  if (width >= 1200) {
+                                                    columns = 3;
+                                                  } else if (width >= 860) {
+                                                    columns = 2;
+                                                  } else if (width >= 620) {
+                                                    columns = 2;
+                                                  }
+                                                final childAspectRatio = switch (columns) {
+                                                  3 => 1.62,
+                                                  2 => 1.78,
+                                                  _ => 2.15,
+                                                };
 
-                                      return GridView.builder(
-                                        itemCount: filtered.length,
-                                        gridDelegate:
-                                            SliverGridDelegateWithFixedCrossAxisCount(
-                                          crossAxisCount: columns,
-                                          crossAxisSpacing: 10,
-                                          mainAxisSpacing: 10,
-                                          childAspectRatio: childAspectRatio,
-                                        ),
-                                        itemBuilder: (context, index) {
-                                          final customer = filtered[index];
-                                          return _CustomerCard(
-                                            customer: customer,
-                                            onOpenNotes: () => _openNotesDialog(
-                                              context,
-                                              customer,
+                                                return SizedBox(
+                                                  height: directoryGridHeight,
+                                                  child: GridView.builder(
+                                                    itemCount: filtered.length,
+                                                    gridDelegate:
+                                                        SliverGridDelegateWithFixedCrossAxisCount(
+                                                      crossAxisCount: columns,
+                                                      crossAxisSpacing: 12,
+                                                      mainAxisSpacing: 12,
+                                                      childAspectRatio:
+                                                          childAspectRatio,
+                                                    ),
+                                                    itemBuilder:
+                                                        (context, index) {
+                                                      final customer =
+                                                          filtered[index];
+                                                      return _CustomerCard(
+                                                        customer: customer,
+                                                        onOpenNotes: () =>
+                                                            _openNotesDialog(
+                                                          context,
+                                                          customer,
+                                                        ),
+                                                      );
+                                                    },
+                                                  ),
+                                                );
+                                              },
                                             ),
-                                          );
-                                        },
-                                      );
-                                    },
+                                    ),
+                                  ],
+                                );
+
+                                final insightsPane = SizedBox(
+                                  height: insightsHeight,
+                                  child: SingleChildScrollView(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        AdminSectionCard(
+                                          title: 'Customer Mix',
+                                          subtitle:
+                                              'A quick read on who your best customers are.',
+                                          child: Column(
+                                            children:
+                                                segmentCounts.entries.map((entry) {
+                                              final total = filtered.isEmpty
+                                                  ? 0.0
+                                                  : filtered.length.toDouble();
+                                              final color = switch (entry.key) {
+                                                'VIP' => Colors.green,
+                                                'Returning' => Colors.blue,
+                                                _ => Colors.orange,
+                                              };
+                                              return Padding(
+                                                padding: const EdgeInsets.only(
+                                                  bottom: 10,
+                                                ),
+                                                child: _ProgressLine(
+                                                  label: entry.key,
+                                                  valueLabel:
+                                                      '${entry.value} customers',
+                                                  value: entry.value.toDouble(),
+                                                  total: total,
+                                                  color: color,
+                                                ),
+                                              );
+                                            }).toList(),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 14),
+                                        AdminSectionCard(
+                                          title: 'Top Customers',
+                                          subtitle:
+                                              'Highest value customers by spend and orders.',
+                                          child: Column(
+                                            children: topCustomers
+                                                .take(5)
+                                                .map(
+                                                  (customer) => Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                      bottom: 10,
+                                                    ),
+                                                    child: _CustomerRankRow(
+                                                      customer: customer,
+                                                      tone:
+                                                          customer.segment ==
+                                                                  'VIP'
+                                                              ? Colors.green
+                                                              : Colors.blueGrey,
+                                                    ),
+                                                  ),
+                                                )
+                                                .toList(),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 14),
+                                        AdminSectionCard(
+                                          title: 'Note Activity',
+                                          subtitle:
+                                              'Customers with the richest recent context.',
+                                          child: noteHighlights.isEmpty
+                                              ? const AdminEmptyState(
+                                                  icon: Icons.sticky_note_2_outlined,
+                                                  title: 'No note activity',
+                                                  message:
+                                                      'Notes added in the CRM will appear here as live customer context.',
+                                                )
+                                              : Column(
+                                                  children: noteHighlights
+                                                      .map(
+                                                        (customer) => Padding(
+                                                          padding:
+                                                              const EdgeInsets.only(
+                                                            bottom: 10,
+                                                          ),
+                                                          child: _NoteSummaryRow(
+                                                            customer: customer,
+                                                          ),
+                                                        ),
+                                                      )
+                                                      .toList(),
+                                                ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                          ),
+                                );
+
+                                if (wide) {
+                                  return SizedBox(
+                                    height: availableHeight,
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Expanded(flex: 2, child: directoryPane),
+                                        const SizedBox(width: 14),
+                                        SizedBox(
+                                          width: 360,
+                                          height: availableHeight,
+                                          child: insightsPane,
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }
+
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    SizedBox(
+                                      height: directoryPaneHeight,
+                                      child: directoryPane,
+                                    ),
+                                    const SizedBox(height: 14),
+                                    SizedBox(
+                                      height: insightsHeight,
+                                      child: insightsPane,
+                                    ),
+                                  ],
+                                );
+                              },
+                            ),
                         ],
                       ),
                     );
@@ -567,137 +849,136 @@ class _CustomerCard extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: colorScheme.outlineVariant),
+        gradient: LinearGradient(
+          colors: [
+            colorScheme.surface,
+            colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.9)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.all(10),
-        child: Row(
+        padding: const EdgeInsets.all(14),
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            CircleAvatar(
-              radius: 18,
-              backgroundColor: colorScheme.primary.withValues(alpha: 0.13),
-              child: Text(
-                initial,
-                style: TextStyle(
-                  color: colorScheme.primary,
-                  fontWeight: FontWeight.w700,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CircleAvatar(
+                  radius: 22,
+                  backgroundColor: colorScheme.primary.withValues(alpha: 0.13),
+                  child: Text(
+                    initial,
+                    style: TextStyle(
+                      color: colorScheme.primary,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
                 ),
-              ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              customer.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w800),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          _Badge(
+                            text: customer.segment,
+                            tone: customer.segment == 'VIP'
+                                ? Colors.green
+                                : Colors.blueGrey,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        customer.phone,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: onOpenNotes,
+                  icon: const Icon(Icons.edit_note_outlined, size: 16),
+                  label: const Text('Notes'),
+                ),
+              ],
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                _InfoChip(
+                  icon: Icons.receipt_long_outlined,
+                  label: '${customer.orders} orders',
+                ),
+                _InfoChip(
+                  icon: Icons.sticky_note_2_outlined,
+                  label: '${customer.notesCount} notes',
+                ),
+                _InfoChip(
+                  icon: Icons.payments_outlined,
+                  label: 'GHS ${customer.spend.toStringAsFixed(2)}',
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.035),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.black.withValues(alpha: 0.08)),
+              ),
+              child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          customer.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style:
-                              Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                        ),
-                      ),
-                      Card(
-                        elevation: 2,
-                        child: IconButton(
-                          tooltip: 'Notes',
-                          onPressed: onOpenNotes,
-                          visualDensity: VisualDensity.compact,
-                          constraints:
-                              const BoxConstraints(minWidth: 34, minHeight: 34),
-                          icon: const Icon(Icons.edit_note_outlined, size: 19),
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      _Badge(
-                        text: customer.segment,
-                        tone: customer.segment == 'VIP'
-                            ? Colors.green
-                            : Colors.blueGrey,
-                      ),
-                    ],
+                  const Icon(
+                    Icons.chat_bubble_outline_rounded,
+                    size: 15,
                   ),
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [
-                      _InfoChip(
-                        icon: Icons.phone_outlined,
-                        label: customer.phone,
-                      ),
-                      _InfoChip(
-                        icon: Icons.receipt_long_outlined,
-                        label: '${customer.orders} orders',
-                      ),
-                      StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                        stream: FirebaseFirestore.instance
-                            .collection('customers')
-                            .doc(customer.id)
-                            .collection('notes')
-                            .snapshots(),
-                        builder: (context, notesSnap) {
-                          final notesCount =
-                              notesSnap.data?.size ?? customer.notesCount;
-                          return _InfoChip(
-                            icon: Icons.sticky_note_2_outlined,
-                            label: '$notesCount notes',
-                          );
-                        },
-                      ),
-                      _InfoChip(
-                        icon: Icons.payments_outlined,
-                        label: 'GHS ${customer.spend.toStringAsFixed(2)}',
-                      ),
-                    ],
-                  ),
-                  if (customer.note.trim().isNotEmpty) ...[
-                    const SizedBox(height: 20),
-                    Card(
-                      elevation: 0,
-                      color: Colors.black.withValues(alpha: 0.1),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            vertical: 8.0, horizontal: 10),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.chat_bubble_outline_rounded,
-                              size: 14,
-                            ),
-                            const SizedBox(width: 5),
-                            Expanded(
-                              child: Text(
-                                'Latest: ${customer.note.trim()}',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.copyWith(
-                                        color: colorScheme.onSurfaceVariant),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      customer.note.trim().isEmpty
+                          ? 'No note captured yet. Open notes to add context or a follow-up.'
+                          : customer.note.trim(),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
                     ),
-                  ],
+                  ),
                 ],
               ),
             ),
@@ -744,6 +1025,205 @@ class _InfoChip extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.labelMedium,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProgressLine extends StatelessWidget {
+  const _ProgressLine({
+    required this.label,
+    required this.valueLabel,
+    required this.value,
+    required this.total,
+    required this.color,
+  });
+
+  final String label;
+  final String valueLabel;
+  final double value;
+  final double total;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final ratio = total <= 0 ? 0.0 : (value / total).clamp(0.0, 1.0);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                label,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              valueLabel,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: Colors.black54,
+                  ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(999),
+          child: LinearProgressIndicator(
+            value: ratio,
+            minHeight: 8,
+            backgroundColor: color.withValues(alpha: 0.12),
+            valueColor: AlwaysStoppedAnimation<Color>(color),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CustomerRankRow extends StatelessWidget {
+  const _CustomerRankRow({
+    required this.customer,
+    required this.tone,
+  });
+
+  final _CustomerItem customer;
+  final Color tone;
+
+  @override
+  Widget build(BuildContext context) {
+    final initial = customer.name.trim().isEmpty
+        ? '?'
+        : customer.name.trim().substring(0, 1).toUpperCase();
+
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.03),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.black.withValues(alpha: 0.08)),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 18,
+            backgroundColor: tone.withValues(alpha: 0.13),
+            child: Text(
+              initial,
+              style: TextStyle(
+                color: tone,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  customer.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${customer.orders} orders • ${customer.notesCount} notes',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelSmall,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                'GHS ${customer.spend.toStringAsFixed(2)}',
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+              const SizedBox(height: 2),
+              _Badge(text: customer.segment, tone: tone),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NoteSummaryRow extends StatelessWidget {
+  const _NoteSummaryRow({
+    required this.customer,
+  });
+
+  final _CustomerItem customer;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.03),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.black.withValues(alpha: 0.08)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  customer.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _Badge(
+                text: '${customer.notesCount} notes',
+                tone: Colors.indigo,
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            customer.note.trim().isEmpty
+                ? 'No note text yet'
+                : customer.note.trim(),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'GHS ${customer.spend.toStringAsFixed(2)}',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: Colors.black54,
+                ),
           ),
         ],
       ),

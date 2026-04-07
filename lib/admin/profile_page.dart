@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import 'admin_ui.dart';
 import 'loading_skeleton.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -12,11 +13,23 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
+  late final Stream<DocumentSnapshot<Map<String, dynamic>>> _profileStream;
+
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
-  bool _loaded = false;
+  bool _initializedFromSnapshot = false;
   bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final user = FirebaseAuth.instance.currentUser;
+    _profileStream = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user?.uid ?? '')
+        .snapshots();
+  }
 
   @override
   void dispose() {
@@ -26,12 +39,10 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _save(String uid, String role, String email) async {
-    if (!_formKey.currentState!.validate()) {
+    if (!_formKey.currentState!.validate() || _saving) {
       return;
     }
-    if (_saving) {
-      return;
-    }
+
     setState(() => _saving = true);
     try {
       await FirebaseFirestore.instance.collection('users').doc(uid).set({
@@ -67,12 +78,28 @@ class _ProfilePageState extends State<ProfilePage> {
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
-  String _initial(String name, String email) {
-    final seed = name.trim().isNotEmpty ? name.trim() : email.trim();
-    if (seed.isEmpty) {
-      return 'A';
+  double _profileCompleteness(String name, String phone, String email) {
+    final fields = [name.trim(), phone.trim(), email.trim()];
+    final filled = fields.where((value) => value.isNotEmpty).length;
+    return filled / fields.length;
+  }
+
+  String _formatDate(dynamic value) {
+    if (value is Timestamp) {
+      final date = value.toDate();
+      final month = date.month.toString().padLeft(2, '0');
+      final day = date.day.toString().padLeft(2, '0');
+      return '${date.year}-$month-$day';
     }
-    return seed[0].toUpperCase();
+    if (value is DateTime) {
+      final month = value.month.toString().padLeft(2, '0');
+      final day = value.day.toString().padLeft(2, '0');
+      return '${value.year}-$month-$day';
+    }
+    if (value is String && value.trim().isNotEmpty) {
+      return value.trim();
+    }
+    return 'Unknown';
   }
 
   @override
@@ -83,296 +110,318 @@ class _ProfilePageState extends State<ProfilePage> {
     }
 
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
+      stream: _profileStream,
+      builder: (context, profileSnap) {
+        if (profileSnap.connectionState == ConnectionState.waiting) {
           return const _ProfilePageSkeleton();
         }
-        if (snapshot.hasError) {
+        if (profileSnap.hasError) {
           return FirestoreErrorPanel(
             title: 'Profile cannot be loaded.',
-            error: snapshot.error,
+            error: profileSnap.error,
           );
         }
-        final data = snapshot.data?.data() ?? {};
+
+        final data = profileSnap.data?.data() ?? {};
         final role = data['role']?.toString() ?? 'unknown';
         final name = data['name']?.toString() ?? '';
         final phone = data['phone']?.toString() ?? '';
+        final email = user.email ?? 'No email';
 
-        if (!_loaded) {
+        if (!_initializedFromSnapshot) {
           _nameController.text = name;
           _phoneController.text = phone;
-          _loaded = true;
+          _initializedFromSnapshot = true;
         }
 
-        final scheme = Theme.of(context).colorScheme;
-        final email = user.email ?? 'No email';
+        final completeness = _profileCompleteness(name, phone, email);
+        final metadata = user.metadata;
+        // final scheme = Theme.of(context).colorScheme;
+
+        final hero = AdminPageIntro(
+          icon: Icons.account_circle_outlined,
+          title: name.isEmpty ? 'Admin Profile' : name,
+          subtitle:
+              'Your identity, permissions, and account details in one place.',
+          badges: [
+            AdminBadge(
+              icon: Icons.verified_user_outlined,
+              label: role.toUpperCase(),
+            ),
+            AdminBadge(
+              icon: Icons.markunread_outlined,
+              label: email,
+            ),
+            // AdminBadge(
+            //   icon: Icons.fingerprint,
+            //   label: user.uid,
+            // ),
+          ],
+        );
+
+        final overviewTiles = Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            _MetricTile(
+              title: 'Role',
+              value: role.toUpperCase(),
+              icon: Icons.badge_outlined,
+            ),
+            _MetricTile(
+              title: 'Profile',
+              value: '${(completeness * 100).round()}%',
+              icon: Icons.health_and_safety_outlined,
+            ),
+            _MetricTile(
+              title: 'Updated',
+              value: _formatDate(data['updatedAt']),
+              icon: Icons.update_outlined,
+            ),
+            _MetricTile(
+              title: 'Created',
+              value: _formatDate(metadata.creationTime),
+              icon: Icons.event_outlined,
+            ),
+          ],
+        );
+
+        final editorCard = AdminSectionCard(
+          title: 'Edit Profile',
+          subtitle:
+              'Keep your contact details current for admin and operational communication.',
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                LayoutBuilder(
+                  builder: (context, formConstraints) {
+                    final twoCols = formConstraints.maxWidth > 760;
+                    if (!twoCols) {
+                      return Column(
+                        children: [
+                          TextFormField(
+                            controller: _nameController,
+                            decoration: const InputDecoration(
+                              labelText: 'Full name',
+                              prefixIcon: Icon(Icons.person_outline),
+                            ),
+                            validator: (value) {
+                              if (value == null || value.trim().isEmpty) {
+                                return 'Name is required';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            controller: _phoneController,
+                            decoration: const InputDecoration(
+                              labelText: 'Phone',
+                              prefixIcon: Icon(Icons.phone_outlined),
+                            ),
+                            validator: (value) {
+                              if (value == null || value.trim().isEmpty) {
+                                return 'Phone is required';
+                              }
+                              return null;
+                            },
+                          ),
+                        ],
+                      );
+                    }
+                    return Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _nameController,
+                            decoration: const InputDecoration(
+                              labelText: 'Full name',
+                              prefixIcon: Icon(Icons.person_outline),
+                            ),
+                            validator: (value) {
+                              if (value == null || value.trim().isEmpty) {
+                                return 'Name is required';
+                              }
+                              return null;
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _phoneController,
+                            decoration: const InputDecoration(
+                              labelText: 'Phone',
+                              prefixIcon: Icon(Icons.phone_outlined),
+                            ),
+                            validator: (value) {
+                              if (value == null || value.trim().isEmpty) {
+                                return 'Phone is required';
+                              }
+                              return null;
+                            },
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    FilledButton.icon(
+                      onPressed:
+                          _saving ? null : () => _save(user.uid, role, email),
+                      icon: _saving
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(Icons.save_outlined),
+                      label: Text(_saving ? 'Saving...' : 'Save Changes'),
+                    ),
+                    const SizedBox(width: 10),
+                    OutlinedButton(
+                      onPressed: _saving
+                          ? null
+                          : () {
+                              _nameController.text = name;
+                              _phoneController.text = phone;
+                              setState(() {});
+                            },
+                      child: const Text('Reset'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+
+        final accountCard = AdminSectionCard(
+          title: 'Account Snapshot',
+          subtitle: 'Identity and security details from Firebase Auth.',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // _DetailRow(label: 'UID', value: user.uid),
+              _DetailRow(label: 'Email', value: email),
+              _DetailRow(
+                label: 'Email verified',
+                value: user.emailVerified ? 'Yes' : 'No',
+              ),
+              _DetailRow(
+                label: 'Provider',
+                value: user.providerData.isEmpty
+                    ? 'Unknown'
+                    : user.providerData.map((e) => e.providerId).join(', '),
+              ),
+              _DetailRow(
+                label: 'Last sign-in',
+                value: metadata.lastSignInTime == null
+                    ? 'Unknown'
+                    : _formatDate(metadata.lastSignInTime),
+              ),
+              _DetailRow(
+                label: 'Created',
+                value: metadata.creationTime == null
+                    ? 'Unknown'
+                    : _formatDate(metadata.creationTime),
+              ),
+            ],
+          ),
+        );
+
+        // final insightCard = AdminSectionCard(
+        //   title: 'Profile Health',
+        //   subtitle: 'A quick read on how complete your admin profile is.',
+        //   child: Column(
+        //     crossAxisAlignment: CrossAxisAlignment.start,
+        //     children: [
+        //       LinearProgressIndicator(
+        //         value: completeness,
+        //         minHeight: 10,
+        //         backgroundColor: scheme.primary.withValues(alpha: 0.12),
+        //         valueColor: AlwaysStoppedAnimation<Color>(scheme.primary),
+        //       ),
+        //       const SizedBox(height: 10),
+        //       Text(
+        //         '${(completeness * 100).round()}% complete',
+        //         style: Theme.of(context).textTheme.titleMedium?.copyWith(
+        //               fontWeight: FontWeight.w700,
+        //             ),
+        //       ),
+        //       const SizedBox(height: 6),
+        //       Text(
+        //         'Complete the remaining fields to keep your admin contact card polished and reliable.',
+        //         style: Theme.of(context).textTheme.bodySmall,
+        //       ),
+        //     ],
+        //   ),
+        // );
 
         return SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 980),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(22),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          scheme.primary,
-                          scheme.primary.withValues(alpha: 0.82),
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Wrap(
-                      spacing: 16,
-                      runSpacing: 16,
-                      crossAxisAlignment: WrapCrossAlignment.center,
+              constraints: const BoxConstraints(maxWidth: 1240),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final wide = constraints.maxWidth >= 1120;
+
+                  if (wide) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        CircleAvatar(
-                          radius: 34,
-                          backgroundColor: Colors.white.withValues(alpha: 0.2),
-                          child: Text(
-                            _initial(name, email),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 24,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 520),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                name.isEmpty ? 'Admin User' : name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .headlineSmall
-                                    ?.copyWith(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                email,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodyMedium
-                                    ?.copyWith(color: Colors.white70),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.16),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.22),
-                            ),
-                          ),
-                          child: Text(
-                            role.toUpperCase(),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.2,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: [
-                      _ProfileMetaCard(
-                        icon: Icons.badge_outlined,
-                        label: 'Role',
-                        value: role.toUpperCase(),
-                      ),
-                      _ProfileMetaCard(
-                        icon: Icons.markunread_outlined,
-                        label: 'Email',
-                        value: email,
-                      ),
-                      // _ProfileMetaCard(
-                      //   icon: Icons.fingerprint,
-                      //   label: 'User ID',
-                      //   value: _shortUid(user.uid),
-                      // ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Form(
-                        key: _formKey,
-                        child: Column(
+                        hero,
+                        const SizedBox(height: 12),
+                        overviewTiles,
+                        const SizedBox(height: 14),
+                        Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              'Edit Profile',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleLarge
-                                  ?.copyWith(fontWeight: FontWeight.w700),
+                            Expanded(
+                              flex: 2,
+                              child: editorCard,
                             ),
-                            const SizedBox(height: 6),
-                            Text(
-                              'Keep your details current for order and account communication.',
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                            const SizedBox(height: 16),
-                            LayoutBuilder(
-                              builder: (context, constraints) {
-                                final twoCols = constraints.maxWidth > 720;
-                                if (!twoCols) {
-                                  return Column(
-                                    children: [
-                                      TextFormField(
-                                        controller: _nameController,
-                                        decoration: const InputDecoration(
-                                          labelText: 'Full name',
-                                          prefixIcon:
-                                              Icon(Icons.person_outline),
-                                        ),
-                                        validator: (value) {
-                                          if (value == null ||
-                                              value.trim().isEmpty) {
-                                            return 'Name is required';
-                                          }
-                                          return null;
-                                        },
-                                      ),
-                                      const SizedBox(height: 12),
-                                      TextFormField(
-                                        controller: _phoneController,
-                                        decoration: const InputDecoration(
-                                          labelText: 'Phone',
-                                          prefixIcon:
-                                              Icon(Icons.phone_outlined),
-                                        ),
-                                        validator: (value) {
-                                          if (value == null ||
-                                              value.trim().isEmpty) {
-                                            return 'Phone is required';
-                                          }
-                                          return null;
-                                        },
-                                      ),
-                                    ],
-                                  );
-                                }
-                                return Row(
-                                  children: [
-                                    Expanded(
-                                      child: TextFormField(
-                                        controller: _nameController,
-                                        decoration: const InputDecoration(
-                                          labelText: 'Full name',
-                                          prefixIcon:
-                                              Icon(Icons.person_outline),
-                                        ),
-                                        validator: (value) {
-                                          if (value == null ||
-                                              value.trim().isEmpty) {
-                                            return 'Name is required';
-                                          }
-                                          return null;
-                                        },
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: TextFormField(
-                                        controller: _phoneController,
-                                        decoration: const InputDecoration(
-                                          labelText: 'Phone',
-                                          prefixIcon:
-                                              Icon(Icons.phone_outlined),
-                                        ),
-                                        validator: (value) {
-                                          if (value == null ||
-                                              value.trim().isEmpty) {
-                                            return 'Phone is required';
-                                          }
-                                          return null;
-                                        },
-                                      ),
-                                    ),
-                                  ],
-                                );
-                              },
-                            ),
-                            const SizedBox(height: 16),
-                            Row(
-                              children: [
-                                FilledButton.icon(
-                                  onPressed: _saving
-                                      ? null
-                                      : () => _save(
-                                    user.uid,
-                                    role,
-                                    email,
-                                  ),
-                                  icon: _saving
-                                      ? const SizedBox(
-                                          width: 16,
-                                          height: 16,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            color: Colors.white,
-                                          ),
-                                        )
-                                      : const Icon(Icons.save_outlined),
-                                  label: Text(
-                                    _saving ? 'Saving...' : 'Save Changes',
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                OutlinedButton(
-                                  onPressed: _saving
-                                      ? null
-                                      : () {
-                                    _nameController.text = name;
-                                    _phoneController.text = phone;
-                                    setState(() {});
-                                  },
-                                  child: const Text('Reset'),
-                                ),
-                              ],
+                            const SizedBox(width: 14),
+                            SizedBox(
+                              width: 360,
+                              child: Column(
+                                children: [
+                                  accountCard,
+                                  const SizedBox(height: 14),
+                                  // insightCard,
+                                ],
+                              ),
                             ),
                           ],
                         ),
-                      ),
-                    ),
-                  ),
-                ],
+                      ],
+                    );
+                  }
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      hero,
+                      const SizedBox(height: 12),
+                      overviewTiles,
+                      const SizedBox(height: 14),
+                      editorCard,
+                      const SizedBox(height: 14),
+                      accountCard,
+                      const SizedBox(height: 14),
+                      // insightCard,
+                    ],
+                  );
+                },
               ),
             ),
           ),
@@ -382,64 +431,96 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 }
 
-class _ProfileMetaCard extends StatelessWidget {
-  const _ProfileMetaCard({
-    required this.icon,
+class _DetailRow extends StatelessWidget {
+  const _DetailRow({
     required this.label,
     required this.value,
   });
 
-  final IconData icon;
   final String label;
   final String value;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      width: 220,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.black12),
-      ),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: scheme.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
+          SizedBox(
+            width: 120,
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: Colors.black54,
+                  ),
             ),
-            child: Icon(icon, color: scheme.primary, size: 18),
           ),
-          const SizedBox(width: 10),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: Theme.of(context)
-                      .textTheme
-                      .labelSmall
-                      ?.copyWith(color: Colors.black54),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context)
-                      .textTheme
-                      .labelLarge
-                      ?.copyWith(fontWeight: FontWeight.w700),
-                ),
-              ],
+            child: Text(
+              value,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _MetricTile extends StatelessWidget {
+  const _MetricTile({
+    required this.title,
+    required this.value,
+    required this.icon,
+  });
+
+  final String title;
+  final String value;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return SizedBox(
+      width: 190,
+      child: Card(
+        elevation: 0,
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side:
+              BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.45)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(9),
+                decoration: BoxDecoration(
+                  color: scheme.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, size: 18, color: scheme.primary),
+              ),
+              const SizedBox(height: 10),
+              Text(title, style: Theme.of(context).textTheme.labelMedium),
+              const SizedBox(height: 4),
+              Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -454,23 +535,25 @@ class _ProfilePageSkeleton extends StatelessWidget {
       padding: const EdgeInsets.all(24),
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 980),
+          constraints: const BoxConstraints(maxWidth: 1240),
           child: const Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SkeletonBox(height: 132),
+              SkeletonBox(height: 138),
               SizedBox(height: 16),
               Row(
                 children: [
-                  Expanded(child: SkeletonBox(height: 72)),
+                  Expanded(child: SkeletonBox(height: 90)),
                   SizedBox(width: 12),
-                  Expanded(child: SkeletonBox(height: 72)),
+                  Expanded(child: SkeletonBox(height: 90)),
                   SizedBox(width: 12),
-                  Expanded(child: SkeletonBox(height: 72)),
+                  Expanded(child: SkeletonBox(height: 90)),
+                  SizedBox(width: 12),
+                  Expanded(child: SkeletonBox(height: 90)),
                 ],
               ),
               SizedBox(height: 16),
-              SkeletonBox(height: 270),
+              SkeletonBox(height: 280),
             ],
           ),
         ),
