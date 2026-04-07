@@ -1,4 +1,4 @@
-// ignore_for_file: avoid_types_as_parameter_names
+// ignore_for_file: prefer_const_constructors, avoid_types_as_parameter_names
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dine_ease/admin/admin_ui.dart';
